@@ -4,6 +4,7 @@ from models import LoginResponseData
 from views.auth.login_view import LoginView
 from views.common.my_account_view import MyAccountView
 from views.citizen.citizen_content_view import CitizenContentView
+from views.admin.admin_view import AdminView
 from app_data import _t
 
 async def main(page: ft.Page):
@@ -57,6 +58,13 @@ async def main(page: ft.Page):
                             icon=ft.icons.PERSON,
                             on_click=lambda _: page.go_async("/account")
                         ),
+                        # Conditionally add Admin link
+                        ft.PopupMenuItem(
+                            text="Admin Panel",
+                            icon=ft.icons.ADMIN_PANEL_SETTINGS,
+                            on_click=lambda _: page.go_async("/admin"),
+                            visible=(user_info_dict.get("role") in ["Admin Municipal", "SuperAdmin"])
+                        ),
                         ft.PopupMenuItem(
                             text=_t("logout_button"),
                             icon=ft.icons.EXIT_TO_APP,
@@ -105,6 +113,26 @@ async def main(page: ft.Page):
                         scroll=ft.ScrollMode.ADAPTIVE
                     )
                 )
+            elif page.route == "/admin":
+                appbar.leading = ft.IconButton(icon=ft.icons.ARROW_BACK, on_click=lambda _: page.go_async("/"))
+                appbar.title = ft.Text("Admin Panel")
+                if user_info_dict.get("role") in ["Admin Municipal", "SuperAdmin"]:
+                    page.views.append(
+                        ft.View(
+                            route="/admin",
+                            appbar=appbar,
+                            controls=[AdminView(api_client=api, user_info=user_info_dict)]
+                        )
+                    )
+                else:
+                    # If a non-admin tries to access, redirect or show error
+                    page.views.append(
+                        ft.View(
+                            route="/",
+                            appbar=appbar,
+                            controls=[ft.Text("Access Denied. You are not an admin.")]
+                        )
+                    )
         else:
             # If no session and not on /login, redirect to login
             print("No session found, redirecting to /login")

@@ -5,8 +5,9 @@ from typing import Dict, List
 # Project imports
 from api_client import ApiClient, APIError
 from app_data import _t
-from models import FineUIDetail
+from models import FineUIDetail, TramiteActivo, ProgramInfo, VehicleBase, VehicleHojaDeVida
 from utils import handle_api_error
+from collections import defaultdict
 
 class CitizenContentView(ft.UserControl):
     """
@@ -40,10 +41,12 @@ class CitizenContentView(ft.UserControl):
             self.content_area.current.controls = [self._create_home_view()]
         elif selected_index == 1: # My Fines
             await self._show_fines_view()
-        elif selected_index == 2: # My Procedures
-            self.content_area.current.controls = [ft.Text(_t("my_tramites", default="My Procedures"))]
-        elif selected_index == 3: # Programs
-            self.content_area.current.controls = [ft.Text(_t("programs", default="Programs"))]
+        elif selected_index == 2: # My Vehicles
+            await self._show_my_vehicles_view()
+        elif selected_index == 3: # My Procedures
+            await self._show_tramites_view()
+        elif selected_index == 4: # Programs
+            await self._show_programs_view()
 
         await self.update_async()
 
@@ -105,6 +108,163 @@ class CitizenContentView(ft.UserControl):
         )
         return ft.Card(content=card_content)
 
+    async def _show_my_vehicles_view(self):
+        """Fetches and displays the user's vehicles."""
+        try:
+            # This method will be implemented in the next phase in the ApiClient
+            # For now, we expect it to exist.
+            vehicles = await self.api_client.get_my_vehicles()
+            if not vehicles:
+                self.content_area.current.controls = [
+                    ft.Column([
+                        ft.Icon(ft.icons.DIRECTIONS_CAR_OUTLINED, opacity=0.5, size=40),
+                        ft.Text("No tienes vehículos registrados.")
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
+                ]
+            else:
+                self.content_area.current.controls = [
+                    ft.Text("Mis Vehículos", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                    ft.ListView(controls=[self._create_vehicle_card(v) for v in vehicles], expand=True, spacing=10)
+                ]
+        except AttributeError:
+             self.content_area.current.controls = [ft.Text("La función get_my_vehicles() aún no está implementada en el API client.")]
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_my_vehicles")
+            self.content_area.current.controls = [ft.Text(_t("error.internal_error_load", error=str(e)))]
+
+        await self.update_async()
+
+    def _create_vehicle_card(self, vehicle: VehicleBase) -> ft.Card:
+        """Creates a Card control for a single vehicle."""
+        return ft.Card(
+            content=ft.Container(
+                padding=15,
+                content=ft.Column([
+                    ft.Text(f"{vehicle.marca} {vehicle.modelo} ({vehicle.ano})", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Placa: {vehicle.placa}"),
+                    ft.Row([
+                        ft.TextButton(
+                            text="Ver Hoja de Vida",
+                            on_click=lambda e, p=vehicle.placa: self._show_my_vehicle_details(p)
+                        )
+                    ], alignment=ft.MainAxisAlignment.END)
+                ])
+            )
+        )
+
+    async def _show_my_vehicle_details(self, placa: str):
+        """Shows the detailed 'Hoja de Vida' for one of the user's vehicles."""
+        self.content_area.current.controls = [ft.ProgressRing()]
+        await self.update_async()
+
+        try:
+            hoja_de_vida = await self.api_client.get_vehicle_details(placa)
+            if not hoja_de_vida:
+                self.content_area.current.controls = [ft.Text("Vehículo no encontrado.")]
+            else:
+                # Build the detailed view
+                history_cards = [
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.BUILD),
+                        title=ft.Text(f"{rev.fecha.strftime('%Y-%m-%d')}: {rev.taller}"),
+                        subtitle=ft.Text(f"{rev.descripcion} - ${rev.costo:,}")
+                    ) for rev in hoja_de_vida.historial_revisiones
+                ] if hoja_de_vida.historial_revisiones else [ft.Text("No hay historial de revisiones.")]
+
+                self.content_area.current.controls = [
+                    ft.Row([
+                        ft.IconButton(icon=ft.icons.ARROW_BACK, on_click=lambda e: self._show_my_vehicles_view()),
+                        ft.Text(f"Hoja de Vida - {hoja_de_vida.placa}", style=ft.TextThemeStyle.HEADLINE_SMALL)
+                    ]),
+                    ft.Text(f"Marca/Modelo: {hoja_de_vida.marca} {hoja_de_vida.modelo} ({hoja_de_vida.ano})"),
+                    ft.Text(f"SOAT Vence: {hoja_de_vida.soat_hasta.strftime('%Y-%m-%d')}"),
+                    ft.Divider(),
+                    ft.Text("Historial de Revisiones", style=ft.TextThemeStyle.TITLE_MEDIUM),
+                    ft.Column(controls=history_cards),
+                    ft.ElevatedButton(text="Añadir Registro de Mantenimiento") # Placeholder
+                ]
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_vehicle_details")
+
+        await self.update_async()
+
+    async def _show_tramites_view(self):
+        """Fetches and displays the user's active procedures."""
+        try:
+            tramites = await self.api_client.get_my_active_tramites()
+            if not tramites:
+                self.content_area.current.controls = [
+                    ft.Column([
+                        ft.Icon(ft.icons.INBOX_OUTLINED, opacity=0.5, size=40),
+                        ft.Text(_t("no_active_tramites"))
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
+                ]
+            else:
+                self.content_area.current.controls = [
+                    ft.Text(_t("my_tramites"), style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                    ft.ListView(controls=[self._create_tramite_card(t) for t in tramites], expand=True, spacing=10)
+                ]
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_tramites")
+            self.content_area.current.controls = [ft.Text(_t("error.internal_error_load", error=str(e)))]
+
+    def _create_tramite_card(self, tramite: TramiteActivo) -> ft.Card:
+        """Creates a Card control for a single active procedure."""
+        return ft.Card(
+            content=ft.Container(
+                padding=15,
+                content=ft.Column([
+                    ft.Text(tramite.nombre, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"{_t('status')}: {tramite.estado}"),
+                    ft.Text(f"{_t('start_date', default='Start Date')}: {tramite.fecha_inicio.strftime('%Y-%m-%d')}", italic=True, color=ft.colors.OUTLINE),
+                ])
+            )
+        )
+
+    async def _show_programs_view(self):
+        """Fetches and displays available programs and procedures."""
+        try:
+            programs = await self.api_client.get_available_procedures()
+
+            # Group programs by category
+            grouped_programs = defaultdict(list)
+            for prog in programs:
+                grouped_programs[prog.categoria].append(prog)
+
+            if not grouped_programs:
+                self.content_area.current.controls = [ft.Text(_t("no_programs_found"))]
+            else:
+                program_list_controls = []
+                for category, items in grouped_programs.items():
+                    program_list_controls.append(ft.Text(category, style=ft.TextThemeStyle.HEADLINE_SMALL))
+                    for item in items:
+                        program_list_controls.append(self._create_program_card(item))
+                    program_list_controls.append(ft.Divider(height=20))
+
+                self.content_area.current.controls = [
+                    ft.Text(_t("programs"), style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                    ft.ListView(controls=program_list_controls, expand=True, spacing=10)
+                ]
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_programs")
+            self.content_area.current.controls = [ft.Text(_t("error.internal_error_load", error=str(e)))]
+
+    def _create_program_card(self, program: ProgramInfo) -> ft.Card:
+        """Creates a Card control for a single program or procedure."""
+        return ft.Card(
+            content=ft.Container(
+                padding=15,
+                content=ft.Column([
+                    ft.Text(program.nombre, weight=ft.FontWeight.BOLD),
+                    ft.Text(program.descripcion, italic=True, color=ft.colors.OUTLINE),
+                    ft.Row([
+                        ft.TextButton(text=_t("details", default="Details"))
+                        # In a real app, this would open a details view
+                    ], alignment=ft.MainAxisAlignment.END)
+                ])
+            )
+        )
+
     def build(self):
         """Builds the UI for the CitizenContentView."""
         return ft.Row(
@@ -120,6 +280,7 @@ class CitizenContentView(ft.UserControl):
                     destinations=[
                         ft.NavigationRailDestination(icon=ft.icons.HOME_OUTLINED, selected_icon=ft.icons.HOME, label=_t("home")),
                         ft.NavigationRailDestination(icon=ft.icons.RECEIPT_LONG_OUTLINED, selected_icon=ft.icons.RECEIPT_LONG, label=_t("my_fines")),
+                        ft.NavigationRailDestination(icon=ft.icons.DIRECTIONS_CAR_OUTLINED, selected_icon=ft.icons.DIRECTIONS_CAR, label="Mis Vehículos"),
                         ft.NavigationRailDestination(icon=ft.icons.DESCRIPTION_OUTLINED, selected_icon=ft.icons.DESCRIPTION, label=_t("my_tramites")),
                         ft.NavigationRailDestination(icon=ft.icons.EVENT_OUTLINED, selected_icon=ft.icons.EVENT, label=_t("programs")),
                     ],

@@ -254,3 +254,33 @@ class DashboardData(BaseModel):
 
 # To resolve forward references like List["TramiteActivo"]
 UserDetail.update_forward_refs()
+
+# --- Vehicle Models ---
+
+class RevisionHistorial(BaseModel):
+    """A single entry in a vehicle's maintenance history."""
+    fecha: date
+    taller: str
+    descripcion: str
+    costo: int
+
+class VehicleBase(BaseModel):
+    """Basic information about a vehicle."""
+    placa: str = Field(..., description="License plate, primary identifier")
+    marca: str
+    modelo: str
+    ano: int = Field(..., gt=1900, lt=2100)
+    tipo: str # e.g., Automóvil, Motocicleta, Camión
+    propietario_username: str
+
+class VehicleHojaDeVida(VehicleBase):
+    """The complete 'resume' or 'life record' of a vehicle."""
+    color: str
+    cilindraje: Optional[int] = Field(None, description="Engine displacement in CC")
+    fecha_matricula: date
+    soat_hasta: date
+    tecno_hasta: Optional[date] = None # Optional for new vehicles
+    historial_revisiones: List[RevisionHistorial] = []
+
+    class Config:
+        orm_mode = True
