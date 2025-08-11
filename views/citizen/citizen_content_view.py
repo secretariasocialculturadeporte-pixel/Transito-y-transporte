@@ -81,11 +81,20 @@ class CitizenContentView(ft.UserControl):
         """Creates a Card control for a single fine."""
         status_color = ft.colors.GREEN if fine.status == "Pagado" else (ft.colors.ORANGE if fine.status == "Pendiente" else ft.colors.GREY)
 
+        async def complete_course_click(e, fine_id=fine.id):
+            try:
+                await self.api_client.mark_course_as_completed(fine_id)
+                # Refresh the view to show updated status and potential new discount
+                await self._show_fines_view()
+            except Exception as ex:
+                await handle_api_error(self.page, ex, "mark_course_completed")
+
         card_content = ft.Container(
             padding=15,
             content=ft.Column([
                 ft.Row([
                     ft.Text(f"ID: {fine.id}", weight=ft.FontWeight.BOLD),
+                    ft.Chip(label=ft.Text(fine.tipo), bgcolor=ft.colors.BLUE_GREY),
                     ft.Chip(
                         label=ft.Text(fine.status),
                         bgcolor=status_color,
@@ -103,10 +112,31 @@ class CitizenContentView(ft.UserControl):
                     color=ft.colors.GREEN,
                     italic=True,
                     visible=fine.descuento_aplicable
+                ),
+                ft.ElevatedButton(
+                    text="Marcar Curso como Completado",
+                    icon=ft.icons.SCHOOL,
+                    on_click=complete_course_click,
+                    visible=(fine.tipo == "Pedagógico" and not fine.curso_completado and fine.status == "Pendiente")
+                ),
+                ft.TextButton(
+                    text="Impugnar Comparendo",
+                    icon=ft.icons.GAVEL,
+                    on_click=lambda e, f_id=fine.id: self._contest_fine_click(f_id),
+                    visible=(fine.status == "Pendiente")
                 )
             ])
         )
         return ft.Card(content=card_content)
+
+    async def _contest_fine_click(self, fine_id: str):
+        """Handles the click event for contesting a fine."""
+        try:
+            await self.api_client.contest_fine(fine_id)
+            await show_snackbar_async(self.page, "El comparendo ha sido marcado como impugnado.", ft.colors.BLUE)
+            await self._show_fines_view()
+        except Exception as e:
+            await handle_api_error(self.page, e, "contest_fine")
 
     async def _show_my_vehicles_view(self):
         """Fetches and displays the user's vehicles."""

@@ -146,14 +146,28 @@ class PasswordChangeData(BaseModel):
 
 # --- Fine Models ---
 
+class InfractionInfo(BaseModel):
+    """
+    Represents a type of traffic infraction from the official catalog.
+    """
+    code: str = Field(..., description="The official code, e.g., 'C29'")
+    category: str = Field(..., description="Category from A to F")
+    description: str
+    uvb_value: float
+
 class FineBase(BaseModel):
+    """
+    Represents an instance of a fine issued to a user.
+    """
     id: str
     date: date
-    codigo_infraccion: Optional[str] = None
-    description: Optional[str] = None
-    value: int
-    status: str = Field(..., pattern=r"^(Pendiente|Pagado|Anulado)$")
+    infraction_code: str # Links to InfractionInfo
+    placa: str # License plate of the vehicle involved
+    status: str = Field("Pendiente", pattern=r"^(Pendiente|Pagado|Anulado|Impugnado)$")
+    tipo: str = Field("Económico", pattern=r"^(Económico|Pedagógico)$")
     paid_date: Optional[date] = None
+    contested: bool = False
+    curso_completado: bool = False
 
     @validator('date', 'paid_date', pre=True, allow_reuse=True)
     def parse_optional_date(cls, value):
@@ -170,7 +184,13 @@ class FineBase(BaseModel):
         orm_mode = True
 
 class FineUIDetail(FineBase):
-    puntos: int = 0
+    """
+    Extended fine model for UI display, including calculated values.
+    """
+    # These fields are populated by the API client before sending to the UI
+    description: str # Denormalized from InfractionInfo
+    base_value: int # Calculated from UVB
+    puntos: int = 0 # This would be part of InfractionInfo in a real system
     descuento_aplicable: bool = False
     valor_con_descuento: Optional[int] = None
     base_value_formatted: str
@@ -256,6 +276,13 @@ class DashboardData(BaseModel):
 UserDetail.update_forward_refs()
 
 # --- Vehicle Models ---
+
+class CourseInfo(BaseModel):
+    """Represents a pedagogical course."""
+    id: str
+    name: str
+    description: str
+    duration_hours: int
 
 class RevisionHistorial(BaseModel):
     """A single entry in a vehicle's maintenance history."""

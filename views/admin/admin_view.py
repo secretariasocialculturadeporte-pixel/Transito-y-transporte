@@ -1,12 +1,13 @@
 # views/admin/admin_view.py
 import flet as ft
 from typing import Dict
+import datetime
 
 # Project imports
 from api_client import ApiClient
 from app_data import _t
-from models import VehicleBase, VehicleHojaDeVida
-from utils import handle_api_error
+from models import VehicleBase, VehicleHojaDeVida, UserInDB
+from utils import handle_api_error, show_snackbar_async
 
 class AdminView(ft.UserControl):
     """
@@ -36,6 +37,88 @@ class AdminView(ft.UserControl):
             await self._show_vehicle_fleet_view()
         elif selected_index == 1: # User Management
             await self._show_user_management_view()
+        elif selected_index == 2: # Infractions Management
+            await self._show_infractions_management_view()
+        elif selected_index == 3: # Courses Management
+            await self._show_courses_management_view()
+
+        await self.update_async()
+
+    async def _show_courses_management_view(self):
+        """Displays the UI for managing the courses catalog."""
+        self.content_area.current.controls = [
+            ft.Row([
+                ft.Text("Gestión de Cursos Pedagógicos", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                ft.IconButton(icon=ft.icons.REFRESH, on_click=self._show_courses_management_view)
+            ]),
+        ]
+
+        try:
+            courses = await self.api_client.get_courses()
+
+            columns = [
+                ft.DataColumn(ft.Text("ID")),
+                ft.DataColumn(ft.Text("Nombre")),
+                ft.DataColumn(ft.Text("Duración (Horas)")),
+                ft.DataColumn(ft.Text("Acciones")),
+            ]
+
+            rows = []
+            for course in courses:
+                rows.append(ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(course.id)),
+                    ft.DataCell(ft.Text(course.name, width=300, max_lines=2)),
+                    ft.DataCell(ft.Text(str(course.duration_hours))),
+                    ft.DataCell(ft.Row([
+                        ft.IconButton(icon=ft.icons.EDIT, tooltip="Editar Curso"),
+                        ft.IconButton(icon=ft.icons.DELETE, tooltip="Eliminar Curso", icon_color=ft.colors.RED),
+                    ]))
+                ]))
+
+            self.content_area.current.controls.append(ft.DataTable(columns=columns, rows=rows))
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_courses_catalog")
+
+        await self.update_async()
+
+    async def _show_infractions_management_view(self):
+        """Displays the UI for managing the infraction catalog."""
+        self.content_area.current.controls = [
+            ft.Row([
+                ft.Text("Gestión de Catálogo de Infracciones", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                ft.IconButton(icon=ft.icons.REFRESH, on_click=self._show_infractions_management_view)
+            ]),
+        ]
+
+        try:
+            catalog = await self.api_client.get_infraction_catalog()
+
+            columns = [
+                ft.DataColumn(ft.Text("Código")),
+                ft.DataColumn(ft.Text("Categoría")),
+                ft.DataColumn(ft.Text("Descripción")),
+                ft.DataColumn(ft.Text("Valor (UVB)")),
+                ft.DataColumn(ft.Text("Acciones")),
+            ]
+
+            rows = []
+            for info in catalog:
+                rows.append(ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(info.code)),
+                    ft.DataCell(ft.Text(info.category)),
+                    ft.DataCell(ft.Text(info.description, width=400, max_lines=2)),
+                    ft.DataCell(ft.Text(str(info.uvb_value))),
+                    ft.DataCell(ft.Row([
+                        ft.IconButton(icon=ft.icons.EDIT, tooltip="Editar Infracción"),
+                        ft.IconButton(icon=ft.icons.DELETE, tooltip="Eliminar Infracción", icon_color=ft.colors.RED),
+                    ]))
+                ]))
+
+            self.content_area.current.controls.append(ft.DataTable(columns=columns, rows=rows))
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_infraction_catalog")
 
         await self.update_async()
 
@@ -67,8 +150,14 @@ class AdminView(ft.UserControl):
                     ft.DataCell(ft.Text(user.role)),
                     ft.DataCell(ft.Chip(label=ft.Text(user.status), bgcolor=ft.colors.GREEN if user.status == "Active" else ft.colors.RED)),
                     ft.DataCell(ft.Row([
-                        ft.IconButton(icon=ft.icons.EDIT, tooltip="Edit User"),
-                        ft.IconButton(icon=ft.icons.DELETE, tooltip="Delete User", icon_color=ft.colors.RED),
+                        ft.IconButton(icon=ft.icons.EDIT, tooltip="Editar Usuario"),
+                        ft.IconButton(icon=ft.icons.DELETE, tooltip="Eliminar Usuario", icon_color=ft.colors.RED),
+                        ft.IconButton(
+                            icon=ft.icons.GAVEL,
+                            tooltip="Imponer Comparendo",
+                            icon_color=ft.colors.ORANGE,
+                            on_click=lambda e, u=user: self._open_issue_fine_dialog(u)
+                        ),
                     ]))
                 ]))
 
@@ -78,6 +167,66 @@ class AdminView(ft.UserControl):
             await handle_api_error(self.page, e, "load_users")
 
         await self.update_async()
+
+    def _open_issue_fine_dialog(self, user: UserInDB):
+        """Opens a dialog to issue a new fine to a user."""
+
+        # --- Dialog Controls ---
+        infraction_code_dd = ft.Ref[ft.Dropdown]()
+        placa_tf = ft.Ref[ft.TextField]()
+        tipo_dd = ft.Ref[ft.Dropdown]()
+
+        async def issue_fine_click(e):
+            try:
+                # Basic validation
+                if not all([infraction_code_dd.current.value, placa_tf.current.value, tipo_dd.current.value]):
+                    await show_snackbar_async(self.page, "Todos los campos son requeridos.", ft.colors.RED)
+                    return
+
+                await self.api_client.issue_new_fine(
+                    username=user.username,
+                    infraction_code=infraction_code_dd.current.value,
+                    placa=placa_tf.current.value,
+                    date=datetime.date.today(), # For simplicity, use today's date
+                    tipo=tipo_dd.current.value
+                )
+
+                self.page.dialog.open = False
+                await self.page.update_async()
+                await show_snackbar_async(self.page, f"Comparendo impuesto a {user.username} exitosamente.", ft.colors.GREEN)
+
+            except Exception as ex:
+                await handle_api_error(self.page, ex, "issue_fine")
+
+        # --- Dialog Definition ---
+        self.page.dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Imponer Comparendo a {user.username}"),
+            content=ft.Column([
+                ft.Dropdown(
+                    ref=infraction_code_dd,
+                    label="Código de Infracción",
+                    options=[ft.dropdown.Option(code) for code in self.api_client._infractions.keys()]
+                ),
+                ft.TextField(ref=placa_tf, label="Placa del Vehículo"),
+                ft.Dropdown(
+                    ref=tipo_dd,
+                    label="Tipo de Comparendo",
+                    options=[
+                        ft.dropdown.Option("Económico"),
+                        ft.dropdown.Option("Pedagógico"),
+                    ]
+                )
+            ]),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: setattr(self.page.dialog, 'open', False) or self.page.update()),
+                ft.ElevatedButton("Imponer", on_click=issue_fine_click),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.dialog.open = True
+        self.page.update()
 
 
     async def _show_vehicle_fleet_view(self):
@@ -175,6 +324,8 @@ class AdminView(ft.UserControl):
                     destinations=[
                         ft.NavigationRailDestination(icon=ft.icons.DIRECTIONS_CAR, label="Parque Automotor"),
                         ft.NavigationRailDestination(icon=ft.icons.GROUP, label="Gestión Usuarios"),
+                        ft.NavigationRailDestination(icon=ft.icons.GAVEL, label="Infracciones"),
+                        ft.NavigationRailDestination(icon=ft.icons.SCHOOL, label="Cursos"),
                     ],
                     on_change=self._on_nav_change,
                 ),

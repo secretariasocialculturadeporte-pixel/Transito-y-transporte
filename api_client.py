@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 # Assuming models and app_data are in the root directory
 import models
-from app_data import _t
+from app_data import _t, UVB_VALUE_2025, INFRACTIONS_CATALOG, COURSES_CATALOG
 
 # --- Custom Exception for API Errors ---
 
@@ -36,6 +36,8 @@ class ApiClient:
         self._active_tramites: Dict[str, List[models.TramiteActivo]] = {}
         self._vehicles: Dict[str, Dict[str, models.VehicleHojaDeVida]] = {} # {mun_code: {placa: Vehicle}}
         self._procedures: List[models.ProgramInfo] = []
+        self._infractions: Dict[str, models.InfractionInfo] = {} # {code: InfractionInfo}
+        self._courses: Dict[str, models.CourseInfo] = {} # {id: CourseInfo}
         self._load_initial_data()
 
     async def _simulate_network(self, delay: float = 0.5):
@@ -70,22 +72,26 @@ class ApiClient:
         )
         self._users[citizen_user.username] = citizen_user
 
-        # Create sample fines for the citizen
+        # Load infractions catalog into a searchable dictionary
+        for info in INFRACTIONS_CATALOG:
+            self._infractions[info['code']] = models.InfractionInfo(**info)
+
+        # Create sample fines for the citizen using the new structure
         self._fines[citizen_user.username] = [
             models.FineBase(
                 id="C0MP001",
                 date=datetime.date(2023, 10, 20),
-                codigo_infraccion="C29",
-                description="Conducir a velocidad superior a la máxima permitida.",
-                value=980000,
-                status="Pendiente"
+                infraction_code="C29",
+                placa="ABC-123",
+                status="Pendiente",
+                tipo="Pedagógico", # This one requires a course
+                curso_completado=False
             ),
             models.FineBase(
                 id="C0MP002",
                 date=datetime.date(2023, 11, 5),
-                codigo_infraccion="D04",
-                description="No detenerse ante una luz roja de semáforo.",
-                value=1100000,
+                infraction_code="D04",
+                placa="ABC-123",
                 status="Pagado",
                 paid_date=datetime.date(2023, 11, 15)
             )
@@ -166,6 +172,10 @@ class ApiClient:
             )
         ]
 
+        # Load courses catalog
+        for course_info in COURSES_CATALOG:
+            self._courses[course_info['id']] = models.CourseInfo(**course_info)
+
         print(f"Initial data loaded. Users: {list(self._users.keys())}, Vehicles: {len(self._vehicles.get('05001', {}))}")
 
 
@@ -222,24 +232,56 @@ class ApiClient:
         ui_fines = []
 
         for fine in raw_fines:
-            # Simulate business logic for calculating discounts, etc.
-            days_since_fine = (datetime.date.today() - fine.date).days
-            descuento_aplicable = (fine.status == "Pendiente" and days_since_fine <= 5)
+            infraction_info = self._infractions.get(fine.infraction_code)
+            if not infraction_info:
+                continue # Skip fines with no matching infraction info
 
-            valor_con_descuento = fine.value // 2 if descuento_aplicable else fine.value
+            base_value = int(infraction_info.uvb_value * UVB_VALUE_2025)
+
+            # Updated business logic for discounts
+            days_since_fine = (datetime.date.today() - fine.date).days
+            descuento_aplicable = False
+            if fine.status == "Pendiente":
+                if fine.tipo == "Pedagógico":
+                    # Discount only applies if the course is completed
+                    if fine.curso_completado and days_since_fine <= 5:
+                        descuento_aplicable = True
+                else: # For economic fines, discount is direct
+                    if days_since_fine <= 5:
+                        descuento_aplicable = True
+
+            valor_con_descuento = base_value // 2 if descuento_aplicable else base_value
 
             ui_fines.append(
                 models.FineUIDetail(
                     **fine.dict(),
-                    puntos=3, # Dummy value
+                    description=infraction_info.description,
+                    base_value=base_value,
+                    puntos=3, # Dummy value, could be added to InfractionInfo
                     descuento_aplicable=descuento_aplicable,
                     valor_con_descuento=valor_con_descuento,
-                    base_value_formatted=f"${fine.value:,}",
+                    base_value_formatted=f"${base_value:,}",
                     final_value_formatted=f"${valor_con_descuento:,}{'*' if descuento_aplicable else ''}",
-                    fine_info_tooltip=f"{fine.codigo_infraccion}: {fine.description}"
+                    fine_info_tooltip=f"{infraction_info.code}: {infraction_info.description}"
                 )
             )
         return ui_fines
+
+    async def mark_course_as_completed(self, fine_id: str) -> bool:
+        """Finds a fine and marks its pedagogical course as completed."""
+        await self._simulate_network()
+
+        # Find the fine across all users
+        for user_fines in self._fines.values():
+            for fine in user_fines:
+                if fine.id == fine_id:
+                    if fine.tipo != "Pedagógico":
+                        raise APIError("Esta multa no es pedagógica.", 400)
+                    fine.curso_completado = True
+                    print(f"Course marked as completed for fine {fine_id}")
+                    return True
+
+        raise APIError("Multa no encontrada.", 404)
 
     async def get_user_details(self, username: Optional[str] = None) -> models.UserDetail:
         """
@@ -448,3 +490,117 @@ class ApiClient:
 
         del self._users[username]
         return True
+
+    # --- Infraction Catalog Management ---
+
+    async def get_infraction_catalog(self) -> List[models.InfractionInfo]:
+        """Returns the entire list of infraction types."""
+        await self._simulate_network()
+        return list(self._infractions.values())
+
+    async def add_infraction_info(self, infraction_data: models.InfractionInfo) -> models.InfractionInfo:
+        """Adds a new infraction type to the catalog."""
+        await self._simulate_network()
+        if infraction_data.code in self._infractions:
+            raise APIError(f"Infraction code '{infraction_data.code}' already exists.", 409)
+        self._infractions[infraction_data.code] = infraction_data
+        return infraction_data
+
+    async def update_infraction_info(self, code: str, infraction_data: models.InfractionInfo) -> models.InfractionInfo:
+        """Updates an existing infraction type in the catalog."""
+        await self._simulate_network()
+        if code not in self._infractions:
+            raise APIError(f"Infraction code '{code}' not found.", 404)
+        # If the code itself is being changed, we need to handle that
+        if code != infraction_data.code:
+            if infraction_data.code in self._infractions:
+                 raise APIError(f"New infraction code '{infraction_data.code}' already exists.", 409)
+            del self._infractions[code] # remove old entry
+        self._infractions[infraction_data.code] = infraction_data
+        return infraction_data
+
+    async def delete_infraction_info(self, code: str) -> bool:
+        """Deletes an infraction type from the catalog."""
+        await self._simulate_network()
+        if code not in self._infractions:
+            raise APIError(f"Infraction code '{code}' not found.", 404)
+        del self._infractions[code]
+        return True
+
+    # --- Courses Catalog Management ---
+
+    async def get_courses(self) -> List[models.CourseInfo]:
+        """Returns the entire list of courses."""
+        await self._simulate_network()
+        return list(self._courses.values())
+
+    async def add_course(self, course_data: models.CourseInfo) -> models.CourseInfo:
+        """Adds a new course to the catalog."""
+        await self._simulate_network()
+        if course_data.id in self._courses:
+            raise APIError(f"Course ID '{course_data.id}' already exists.", 409)
+        self._courses[course_data.id] = course_data
+        return course_data
+
+    async def update_course(self, course_id: str, course_data: models.CourseInfo) -> models.CourseInfo:
+        """Updates an existing course in the catalog."""
+        await self._simulate_network()
+        if course_id not in self._courses:
+            raise APIError(f"Course ID '{course_id}' not found.", 404)
+        if course_id != course_data.id:
+            if course_data.id in self._courses:
+                 raise APIError(f"New course ID '{course_data.id}' already exists.", 409)
+            del self._courses[course_id]
+        self._courses[course_data.id] = course_data
+        return course_data
+
+    async def delete_course(self, course_id: str) -> bool:
+        """Deletes a course from the catalog."""
+        await self._simulate_network()
+        if course_id not in self._courses:
+            raise APIError(f"Course ID '{course_id}' not found.", 404)
+        del self._courses[course_id]
+        return True
+
+    # --- Fine Issuing ---
+
+    async def issue_new_fine(self, username: str, infraction_code: str, placa: str, date: datetime.date, tipo: str) -> models.FineBase:
+        """Issues a new fine to a specific user."""
+        await self._simulate_network()
+
+        if username not in self._users:
+            raise APIError(_t("error.user_not_found"), 404)
+        if infraction_code not in self._infractions:
+            raise APIError("Código de infracción inválido.", 404)
+
+        new_fine = models.FineBase(
+            id=f"COMP-{random.randint(1000, 9999)}",
+            date=date,
+            infraction_code=infraction_code,
+            placa=placa,
+            tipo=tipo,
+            status="Pendiente"
+        )
+
+        if username not in self._fines:
+            self._fines[username] = []
+
+        self._fines[username].append(new_fine)
+        print(f"Issued new fine {new_fine.id} to user {username}")
+        return new_fine
+
+    async def contest_fine(self, fine_id: str) -> bool:
+        """Finds a fine and marks it as contested."""
+        await self._simulate_network()
+
+        for user_fines in self._fines.values():
+            for fine in user_fines:
+                if fine.id == fine_id:
+                    if fine.status != "Pendiente":
+                        raise APIError("Solo se pueden impugnar multas pendientes.", 400)
+                    fine.contested = True
+                    fine.status = "Impugnado"
+                    print(f"Fine {fine_id} has been contested.")
+                    return True
+
+        raise APIError("Multa no encontrada.", 404)
