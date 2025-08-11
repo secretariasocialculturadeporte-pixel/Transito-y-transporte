@@ -180,6 +180,36 @@ nav ul {
     color: #555;
 }
 
+/* --- Downloads Section --- */
+.downloads-section {
+    background-color: var(--secondary-color);
+    color: var(--white);
+}
+
+.downloads-section h2 {
+    color: var(--white);
+}
+
+.download-options {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+}
+
+.download-card {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 30px;
+    border-radius: 8px;
+    width: 350px;
+    border: 1px solid var(--primary-color);
+}
+
+.download-card h3 {
+    color: var(--accent-color);
+}
+
 /* --- FAQ Section --- */
 .faq-item {
     max-width: 800px;
