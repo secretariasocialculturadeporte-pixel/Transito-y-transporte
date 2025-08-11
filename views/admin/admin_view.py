@@ -8,6 +8,8 @@ from api_client import ApiClient
 from app_data import _t
 from models import VehicleBase, VehicleHojaDeVida, UserInDB
 from utils import handle_api_error, show_snackbar_async
+from analysis.data_analyzer import ANALYSIS_QUESTIONS_CATALOG, DataAnalyzer
+from collections import defaultdict
 
 class AdminView(ft.UserControl):
     """
@@ -41,8 +43,80 @@ class AdminView(ft.UserControl):
             await self._show_infractions_management_view()
         elif selected_index == 3: # Courses Management
             await self._show_courses_management_view()
+        elif selected_index == 4: # Analysis
+            await self._show_analysis_view()
 
         await self.update_async()
+
+    async def _show_analysis_view(self):
+        """Displays the UI for data analysis."""
+
+        results_area = ft.Ref[ft.Column]()
+
+        async def run_analysis(e, function_name: str):
+            # In a real app, you would fetch fresh data here
+            # This is a simplified example using the data loaded in the client
+            all_fines_data = [fine.dict() for fines in self.api_client._fines.values() for fine in fines]
+            all_vehicles_data = [vehicle.dict() for vehicle in self.api_client._vehicles.values()]
+
+            analyzer = DataAnalyzer(all_fines=all_fines_data, all_vehicles=all_vehicles_data)
+
+            results_area.current.controls = [ft.ProgressRing()]
+            await self.update_async()
+
+            try:
+                result = analyzer.analyze(function_name)
+
+                # --- Display Logic ---
+                result_controls = [ft.Text(result.get("title", "Resultado"), style=ft.TextThemeStyle.TITLE_LARGE)]
+                if result['type'] == 'text':
+                    result_controls.append(ft.Text(result['data']))
+                elif result['type'] == 'table':
+                    columns = [ft.DataColumn(ft.Text(col)) for col in result['columns']]
+                    rows = [ft.DataRow(cells=[ft.DataCell(ft.Text(row[col])) for col in result['columns']]) for row in result['data']]
+                    result_controls.append(ft.DataTable(columns=columns, rows=rows))
+                elif result['type'] == 'image':
+                    result_controls.append(ft.Image(src=result['path']))
+
+                results_area.current.controls = result_controls
+
+            except Exception as ex:
+                await handle_api_error(self.page, ex, "run_analysis")
+
+            await self.update_async()
+
+        # Group questions by category
+        grouped_questions = defaultdict(list)
+        for q in ANALYSIS_QUESTIONS_CATALOG:
+            grouped_questions[q['category']].append(q)
+
+        question_controls = []
+        for category, questions in grouped_questions.items():
+            question_links = [
+                ft.ListTile(
+                    title=ft.Text(q['question']),
+                    on_click=lambda e, fn=q['analysis_function']: run_analysis(e, fn)
+                ) for q in questions
+            ]
+            question_controls.append(
+                ft.ExpansionPanelList(
+                    controls=[
+                        ft.ExpansionPanel(
+                            header=ft.ListTile(title=ft.Text(category)),
+                            content=ft.Column(question_links)
+                        )
+                    ]
+                )
+            )
+
+        self.content_area.current.controls = [
+            ft.Text("Análisis y Reportes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+            ft.Column(question_controls),
+            ft.Divider(),
+            ft.Column(ref=results_area)
+        ]
+        await self.update_async()
+
 
     async def _show_courses_management_view(self):
         """Displays the UI for managing the courses catalog."""
@@ -326,9 +400,7 @@ class AdminView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.GROUP, label="Gestión Usuarios"),
                         ft.NavigationRailDestination(icon=ft.icons.GAVEL, label="Infracciones"),
                         ft.NavigationRailDestination(icon=ft.icons.SCHOOL, label="Cursos"),
-                    ] if self.user_info.get("role") == "Dueño" else [
-                        ft.NavigationRailDestination(icon=ft.icons.DIRECTIONS_CAR, label="Parque Automotor"),
-                        ft.NavigationRailDestination(icon=ft.icons.GROUP, label="Gestión Usuarios"),
+                        ft.NavigationRailDestination(icon=ft.icons.ANALYTICS, label="Análisis"),
                     ],
                     on_change=self._on_nav_change,
                 ),

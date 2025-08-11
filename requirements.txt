@@ -7,3 +7,6 @@ uvicorn[standard]
 sqlalchemy
 python-jose[cryptography]
 passlib[bcrypt]
+scikit-learn
+pandas
+matplotlib

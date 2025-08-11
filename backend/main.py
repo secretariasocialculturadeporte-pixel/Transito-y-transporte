@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from .database import engine
 from . import models_db
 
@@ -13,10 +15,13 @@ app = FastAPI(
 
 from .api.v1.endpoints import auth
 
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the Tránsito y Movilidad API"}
-
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
 # We will include other routers here later
+
+# Mount static files for the landing page
+app.mount("/static", StaticFiles(directory="frontend_web"), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse('frontend_web/index.html')
