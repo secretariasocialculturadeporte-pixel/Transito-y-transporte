@@ -1,3 +1,9 @@
 flet
 pydantic
 httpx
+flet_map
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-jose[cryptography]
+passlib[bcrypt]

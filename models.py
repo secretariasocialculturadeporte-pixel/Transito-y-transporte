@@ -18,6 +18,17 @@ class ChatMode(Enum):
     AWAITING_CONFIRMATION = "esperando_confirmacion"
     AWAITING_CLARIFICATION = "esperando_aclaracion"
 
+# --- Multi-Tenancy Models ---
+
+class TransitAuthority(BaseModel):
+    """Represents a single, independent transit authority/agency."""
+    id: str = Field(..., description="Unique identifier for the transit authority")
+    name: str
+    city: str
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 # --- Conversation Context Models ---
 
 class ActiveTask(BaseModel):
@@ -57,6 +68,7 @@ class ErrorResponse(ApiResponse):
 
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=20, pattern=r"^[a-z0-9_]{3,20}$")
+    entidad_id: str # Each user belongs to a transit authority
     role: str
     dept: Optional[str] = Field(None, pattern=r"^\d{1,2}$")
     mun: Optional[str] = Field(None, pattern=r"^\d{3,5}$")
@@ -160,6 +172,7 @@ class FineBase(BaseModel):
     Represents an instance of a fine issued to a user.
     """
     id: str
+    entidad_id: str
     date: date
     infraction_code: str # Links to InfractionInfo
     placa: str # License plate of the vehicle involved
@@ -294,6 +307,7 @@ class RevisionHistorial(BaseModel):
 class VehicleBase(BaseModel):
     """Basic information about a vehicle."""
     placa: str = Field(..., description="License plate, primary identifier")
+    entidad_id: str
     marca: str
     modelo: str
     ano: int = Field(..., gt=1900, lt=2100)

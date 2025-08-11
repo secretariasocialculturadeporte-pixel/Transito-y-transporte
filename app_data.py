@@ -35,6 +35,16 @@ COURSES_CATALOG = [
 
 # User roles available in the application
 USER_ROLES = [
+    "Dueño", # Platform Owner
+    "SuperAdmin", # Transit Authority Admin
+    "Admin Departamental",
+    "Admin Municipal",
+    "Técnico de Tránsito",
+    "Ciudadano",
+]
+
+# Re-ordering for clarity, no functional change
+USER_ROLES_OLD = [
     "Ciudadano",
     "Admin Area",
     "Admin Municipal",

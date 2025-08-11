@@ -6,8 +6,9 @@ from typing import Dict, List
 from api_client import ApiClient, APIError
 from app_data import _t
 from models import FineUIDetail, TramiteActivo, ProgramInfo, VehicleBase, VehicleHojaDeVida
-from utils import handle_api_error
+from utils import handle_api_error, show_snackbar_async
 from collections import defaultdict
+import flet_map as flet_map
 
 class CitizenContentView(ft.UserControl):
     """
@@ -47,6 +48,8 @@ class CitizenContentView(ft.UserControl):
             await self._show_tramites_view()
         elif selected_index == 4: # Programs
             await self._show_programs_view()
+        elif selected_index == 5: # Offices Map
+            await self._show_offices_map_view()
 
         await self.update_async()
 
@@ -295,6 +298,41 @@ class CitizenContentView(ft.UserControl):
             )
         )
 
+    async def _show_offices_map_view(self):
+        """Fetches and displays all transit authority offices on a map."""
+        self.content_area.current.controls = [ft.ProgressRing()]
+        await self.update_async()
+        try:
+            authorities = await self.api_client.get_all_authorities()
+
+            markers = [
+                flet_map.Marker(
+                    latitude=auth.latitude,
+                    longitude=auth.longitude,
+                    tooltip=auth.name
+                ) for auth in authorities if auth.latitude and auth.longitude
+            ]
+
+            if not markers:
+                self.content_area.current.controls = [ft.Text("No se encontraron sedes con geolocalización.")]
+            else:
+                map_control = flet_map.FletMap(
+                    latitude=4.60971, # Centered on Bogotá initially
+                    longitude=-74.08175,
+                    zoom=6,
+                    markers=markers,
+                    expand=True
+                )
+                self.content_area.current.controls = [
+                    ft.Text("Sedes de Tránsito", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                    ft.Container(content=map_control, expand=True, border_radius=10)
+                ]
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_offices_map")
+
+        await self.update_async()
+
     def build(self):
         """Builds the UI for the CitizenContentView."""
         return ft.Row(
@@ -313,6 +351,7 @@ class CitizenContentView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.DIRECTIONS_CAR_OUTLINED, selected_icon=ft.icons.DIRECTIONS_CAR, label="Mis Vehículos"),
                         ft.NavigationRailDestination(icon=ft.icons.DESCRIPTION_OUTLINED, selected_icon=ft.icons.DESCRIPTION, label=_t("my_tramites")),
                         ft.NavigationRailDestination(icon=ft.icons.EVENT_OUTLINED, selected_icon=ft.icons.EVENT, label=_t("programs")),
+                        ft.NavigationRailDestination(icon=ft.icons.MAP_OUTLINED, selected_icon=ft.icons.MAP, label="Sedes"),
                     ],
                     on_change=self._on_nav_change,
                 ),

@@ -248,7 +248,7 @@ class AdminView(ft.UserControl):
         await self.update_async()
 
         try:
-            vehicles = await self.api_client.get_vehicles_by_municipality(self.mun_code)
+            vehicles = await self.api_client.get_vehicles_by_entity()
 
             columns = [
                 ft.DataColumn(ft.Text("Placa")),
@@ -326,6 +326,9 @@ class AdminView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.GROUP, label="Gestión Usuarios"),
                         ft.NavigationRailDestination(icon=ft.icons.GAVEL, label="Infracciones"),
                         ft.NavigationRailDestination(icon=ft.icons.SCHOOL, label="Cursos"),
+                    ] if self.user_info.get("role") == "Dueño" else [
+                        ft.NavigationRailDestination(icon=ft.icons.DIRECTIONS_CAR, label="Parque Automotor"),
+                        ft.NavigationRailDestination(icon=ft.icons.GROUP, label="Gestión Usuarios"),
                     ],
                     on_change=self._on_nav_change,
                 ),
