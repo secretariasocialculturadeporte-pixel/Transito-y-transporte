@@ -47,6 +47,50 @@ class User(Base):
     entidad_id = Column(String, ForeignKey("transit_authorities.id"), nullable=True)
 
     authority = relationship("TransitAuthority", back_populates="users")
+    notification_preferences = relationship(
+        "NotificationPreference",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    fines = relationship("Fine", back_populates="user")
+    appointments = relationship("Appointment", back_populates="user")
+
+
+class Fine(Base):
+    __tablename__ = "fines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    entidad_id = Column(String, ForeignKey("transit_authorities.id"))
+
+    infraction_code = Column(String, index=True)
+    placa = Column(String, index=True)
+    date = Column(Date)
+    status = Column(String, default="Pendiente")
+    tipo = Column(String, default="Económico")
+
+    user = relationship("User", back_populates="fines")
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    placa = Column(String, unique=True, index=True)
+    marca = Column(String)
+    modelo = Column(String)
+    ano = Column(Integer)
+    tipo = Column(String)
+
+    propietario_id = Column(Integer, ForeignKey("users.id"))
+    entidad_id = Column(String, ForeignKey("transit_authorities.id"))
+
+    # Fields for expiration tracking
+    soat_vence = Column(Date, nullable=True)
+    tecno_vence = Column(Date, nullable=True)
+
+    propietario = relationship("User")
 
 
 # We would continue to define tables for Vehicle, Fine, Course, etc.
@@ -69,3 +113,41 @@ class Subscription(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     authority = relationship("TransitAuthority", back_populates="subscriptions")
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+
+    on_new_fine = Column(Boolean, default=True)
+    on_document_expiration = Column(Boolean, default=True)
+    on_appointment_reminder = Column(Boolean, default=True)
+
+    user = relationship("User", back_populates="notification_preferences")
+
+
+class Procedure(Base):
+    __tablename__ = "procedures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String)
+    duration_minutes = Column(Integer, default=30)
+    is_active = Column(Boolean, default=True)
+
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    procedure_id = Column(Integer, ForeignKey("procedures.id"), nullable=False)
+    appointment_time = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String, default="Scheduled") # Scheduled, Completed, Cancelled
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="appointments")
+    procedure = relationship("Procedure")

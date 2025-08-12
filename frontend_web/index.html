@@ -144,6 +144,25 @@
         <p>&copy; 2025 Portal de Movilidad. Todos los derechos reservados.</p>
     </footer>
 
+    <!-- Chat Widget -->
+    <div id="chat-fab" class="chat-fab">
+        <!-- Icon will be set via CSS -->
+    </div>
+    <div id="chat-widget-container" class="chat-widget-container hidden">
+        <div class="chat-widget-header">
+            <h3>Asistente Virtual</h3>
+            <button id="chat-close-btn">&times;</button>
+        </div>
+        <div id="chat-widget-messages" class="chat-widget-messages">
+            <!-- Messages will be injected here by JavaScript -->
+        </div>
+        <div class="chat-widget-input-area">
+            <input type="text" id="chat-widget-input" placeholder="Escribe tu mensaje...">
+            <button id="chat-widget-mic-btn">🎙️</button>
+            <button id="chat-widget-send-btn">➤</button>
+        </div>
+    </div>
+
     <script src="/static/js/main.js"></script>
 </body>
 </html>

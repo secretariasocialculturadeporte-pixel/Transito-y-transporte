@@ -112,3 +112,52 @@ class ApiClient:
         payload = {"message": message, "context": context or {}}
         response_data = await self._request("POST", "/api/v1/chat/", json=payload)
         return response_data
+
+    async def issue_new_fine(self, username: str, infraction_code: str, placa: str, date: Any, tipo: str):
+        """
+        Issues a new fine to a user.
+        """
+        payload = {
+            "target_username": username,
+            "infraction_code": infraction_code,
+            "placa": placa,
+            "date": date.isoformat(),
+            "tipo": tipo
+        }
+        await self._request("POST", "/api/v1/fines/", json=payload)
+
+    async def get_my_notification_preferences(self) -> Dict:
+        """
+        Fetches the current user's notification preferences.
+        """
+        return await self._request("GET", "/api/v1/users/me/notification-preferences")
+
+    async def update_my_notification_preferences(self, prefs_data: Dict) -> Dict:
+        """
+        Updates the current user's notification preferences.
+        """
+        return await self._request("PUT", "/api/v1/users/me/notification-preferences", json=prefs_data)
+
+    async def get_procedures(self) -> List[Dict]:
+        """Fetches all available procedures."""
+        return await self._request("GET", "/api/v1/procedures/")
+
+    async def create_procedure(self, procedure_data: Dict) -> Dict:
+        """Creates a new procedure type (admin only)."""
+        return await self._request("POST", "/api/v1/procedures/", json=procedure_data)
+
+    async def get_my_appointments(self) -> List[Dict]:
+        """Fetches the current user's booked appointments."""
+        return await self._request("GET", "/api/v1/appointments/me")
+
+    async def book_appointment(self, appointment_data: Dict) -> Dict:
+        """Books a new appointment for the current user."""
+        return await self._request("POST", "/api/v1/appointments/", json=appointment_data)
+
+    async def create_fine_checkout(self, fine_id: int) -> str:
+        """
+        Creates a checkout session for a fine and returns the redirect URL.
+        """
+        payload = {"fine_id": fine_id}
+        response = await self._request("POST", "/api/v1/payments/create-fine-checkout-session", json=payload)
+        return response.get("checkout_url")

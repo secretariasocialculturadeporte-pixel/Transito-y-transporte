@@ -48,6 +48,8 @@ class AdminView(ft.UserControl):
             await self._show_analysis_view()
         elif selected_index == 5: # Chat
             self._show_chat_view()
+        elif selected_index == 6: # Procedure Management
+            await self._show_procedures_management_view()
 
         await self.update_async()
 
@@ -134,6 +136,91 @@ class AdminView(ft.UserControl):
         # The ChatView is a self-contained component, pass user_info for personalization.
         chat_view = ChatView(self.api_client, self.user_info)
         self.content_area.current.controls = [chat_view]
+
+    async def _show_procedures_management_view(self):
+        """Displays the UI for managing bookable procedures."""
+
+        async def open_add_procedure_dialog(e):
+            name_field = ft.Ref[ft.TextField]()
+            desc_field = ft.Ref[ft.TextField]()
+            duration_field = ft.Ref[ft.TextField]()
+
+            async def save_procedure_click(e):
+                try:
+                    # Basic validation
+                    if not name_field.current.value or not duration_field.current.value:
+                        # You could show an error in the dialog itself
+                        return
+
+                    procedure_data = {
+                        "name": name_field.current.value,
+                        "description": desc_field.current.value,
+                        "duration_minutes": int(duration_field.current.value)
+                    }
+                    await self.api_client.create_procedure(procedure_data)
+                    self.page.dialog.open = False
+                    await self.page.update_async()
+                    await show_snackbar_async(self.page, "Trámite creado exitosamente.", ft.colors.GREEN)
+                    await self._show_procedures_management_view() # Refresh the view
+                except Exception as ex:
+                    await handle_api_error(self.page, ex, "create_procedure")
+
+            self.page.dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Añadir Nuevo Trámite"),
+                content=ft.Column([
+                    ft.TextField(ref=name_field, label="Nombre del Trámite"),
+                    ft.TextField(ref=desc_field, label="Descripción"),
+                    ft.TextField(ref=duration_field, label="Duración (minutos)", keyboard_type=ft.KeyboardType.NUMBER),
+                ]),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda e: setattr(self.page.dialog, 'open', False) or self.page.update()),
+                    ft.ElevatedButton("Guardar", on_click=save_procedure_click),
+                ]
+            )
+            self.page.dialog.open = True
+            await self.page.update_async()
+
+        self.content_area.current.controls = [
+            ft.Row([
+                ft.Text("Gestión de Trámites Agendables", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                ft.IconButton(icon=ft.icons.REFRESH, on_click=self._show_procedures_management_view)
+            ]),
+            ft.ElevatedButton("Añadir Trámite", icon=ft.icons.ADD, on_click=open_add_procedure_dialog)
+        ]
+
+        try:
+            procedures = await self.api_client.get_procedures()
+
+            columns = [
+                ft.DataColumn(ft.Text("ID")),
+                ft.DataColumn(ft.Text("Nombre")),
+                ft.DataColumn(ft.Text("Descripción")),
+                ft.DataColumn(ft.Text("Duración (min)")),
+                ft.DataColumn(ft.Text("Activo")),
+                ft.DataColumn(ft.Text("Acciones")),
+            ]
+
+            rows = []
+            for proc in procedures:
+                rows.append(ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(proc['id'])),
+                    ft.DataCell(ft.Text(proc['name'])),
+                    ft.DataCell(ft.Text(proc['description'] or "")),
+                    ft.DataCell(ft.Text(str(proc['duration_minutes']))),
+                    ft.DataCell(ft.Icon(ft.icons.CHECK_CIRCLE if proc['is_active'] else ft.icons.CANCEL, color=ft.colors.GREEN if proc['is_active'] else ft.colors.RED)),
+                    ft.DataCell(ft.Row([
+                        ft.IconButton(icon=ft.icons.EDIT, tooltip="Editar Trámite"),
+                        ft.IconButton(icon=ft.icons.POWER_SETTINGS_NEW, tooltip="Activar/Desactivar"),
+                    ]))
+                ]))
+
+            self.content_area.current.controls.append(ft.DataTable(columns=columns, rows=rows))
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_procedures")
+
+        await self.update_async()
 
 
     async def _show_courses_management_view(self):
@@ -420,6 +507,7 @@ class AdminView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.SCHOOL, label="Cursos"),
                         ft.NavigationRailDestination(icon=ft.icons.ANALYTICS, label="Análisis"),
                         ft.NavigationRailDestination(icon=ft.icons.CHAT, label="Chat IA"),
+                        ft.NavigationRailDestination(icon=ft.icons.CALENDAR_MONTH, label="Trámites"),
                     ],
                     on_change=self._on_nav_change,
                 ),

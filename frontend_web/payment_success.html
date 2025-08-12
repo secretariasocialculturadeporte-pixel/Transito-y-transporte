@@ -34,44 +34,63 @@
             const resultMessage = document.getElementById('result-message');
 
             const params = new URLSearchParams(window.location.search);
-            const planId = params.get('plan_id');
-            const entidadId = params.get('entidad_id');
+            const paymentType = params.get('type');
 
-            if (!planId || !entidadId) {
-                mainMessage.textContent = "Error en la Compra";
-                subMessage.textContent = "No se encontró la información del plan. Por favor, intente de nuevo.";
-                return;
+            let payload = {};
+            let successMessage = "";
+            let successSubMessage = "";
+            let resultHtml = "";
+
+            if (paymentType === 'fine') {
+                const fineId = params.get('fine_id');
+                if (!fineId) {
+                    mainMessage.textContent = "Error en el Pago";
+                    subMessage.textContent = "No se encontró la información de la multa.";
+                    return;
+                }
+                payload = { event_type: 'fine_payment_succeeded', fine_id: parseInt(fineId) };
+                successMessage = "¡Pago de Multa Exitoso!";
+                successSubMessage = "Gracias. El pago de su multa ha sido registrado.";
+                resultHtml = `<p>ID de Multa: <strong>${fineId}</strong></p>`;
+
+            } else { // Default to subscription payment
+                const planId = params.get('plan_id');
+                const entidadId = params.get('entidad_id');
+                if (!planId || !entidadId) {
+                    mainMessage.textContent = "Error en la Compra";
+                    subMessage.textContent = "No se encontró la información del plan.";
+                    return;
+                }
+                payload = { event_type: 'subscription_payment_succeeded', plan_id: planId, entidad_id: entidadId };
+                successMessage = "¡Suscripción Exitosa!";
+                successSubMessage = "Gracias por su compra. Su plan ha sido activado.";
+                resultHtml = `<p>Plan: <strong>${planId}</strong></p><p>Entidad: <strong>${entidadId}</strong></p>`;
             }
 
             // This simulates the payment provider's webhook call.
-            // In a real scenario, the provider calls our backend directly.
-            // Here, the user's browser triggers the confirmation.
             try {
                 const response = await fetch('/api/v1/payments/webhook', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        event_type: 'payment_succeeded',
-                        plan_id: planId,
-                        entidad_id: entidadId
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
-                    throw new Error('La activación del plan falló.');
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'La confirmación del pago falló.');
                 }
 
                 const result = await response.json();
                 console.log("Webhook simulation result:", result);
 
-                mainMessage.textContent = "¡Pago Exitoso!";
-                subMessage.textContent = "Gracias por su compra. Su plan ha sido activado.";
-                resultMessage.innerHTML = `<p>Plan: <strong>${planId}</strong></p><p>Entidad: <strong>${entidadId}</strong></p>`;
+                mainMessage.textContent = successMessage;
+                subMessage.textContent = successSubMessage;
+                resultMessage.innerHTML = resultHtml;
 
             } catch (error) {
-                console.error("Error activating plan:", error);
-                mainMessage.textContent = "Error en la Activación";
-                subMessage.textContent = `Hubo un problema al activar su plan. Por favor, contacte a soporte. (${error.message})`;
+                console.error("Error processing payment confirmation:", error);
+                mainMessage.textContent = "Error en la Confirmación";
+                subMessage.textContent = `Hubo un problema al confirmar su pago. Por favor, contacte a soporte. (${error.message})`;
             }
         });
     </script>

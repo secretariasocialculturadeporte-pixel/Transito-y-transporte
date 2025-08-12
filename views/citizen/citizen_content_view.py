@@ -92,6 +92,23 @@ class CitizenContentView(ft.UserControl):
             except Exception as ex:
                 await handle_api_error(self.page, ex, "mark_course_completed")
 
+        async def pay_fine_click(e, fine_id=fine.id):
+            e.control.disabled = True
+            e.control.text = "Procesando..."
+            await self.update_async()
+            try:
+                checkout_url = await self.api_client.create_fine_checkout(fine_id)
+                if checkout_url:
+                    await self.page.launch_url_async(checkout_url)
+                else:
+                    await show_snackbar_async(self.page, "No se pudo obtener la URL de pago.", ft.colors.RED)
+            except Exception as ex:
+                await handle_api_error(self.page, ex, "pay_fine")
+            finally:
+                e.control.disabled = False
+                e.control.text = "Pagar Multa"
+                await self.update_async()
+
         card_content = ft.Container(
             padding=15,
             content=ft.Column([
@@ -127,8 +144,16 @@ class CitizenContentView(ft.UserControl):
                     icon=ft.icons.GAVEL,
                     on_click=lambda e, f_id=fine.id: self._contest_fine_click(f_id),
                     visible=(fine.status == "Pendiente")
+                ),
+                ft.ElevatedButton(
+                    text="Pagar Multa",
+                    icon=ft.icons.PAYMENT,
+                    on_click=pay_fine_click,
+                    visible=(fine.status == "Pendiente" and fine.tipo == "Económico"),
+                    bgcolor=ft.colors.GREEN,
+                    color=ft.colors.WHITE
                 )
-            ])
+            ], alignment=ft.MainAxisAlignment.SPACE_AROUND)
         )
         return ft.Card(content=card_content)
 
@@ -222,34 +247,37 @@ class CitizenContentView(ft.UserControl):
         await self.update_async()
 
     async def _show_tramites_view(self):
-        """Fetches and displays the user's active procedures."""
+        """Fetches and displays the user's scheduled appointments."""
         try:
-            tramites = await self.api_client.get_my_active_tramites()
-            if not tramites:
+            appointments = await self.api_client.get_my_appointments()
+            if not appointments:
                 self.content_area.current.controls = [
                     ft.Column([
-                        ft.Icon(ft.icons.INBOX_OUTLINED, opacity=0.5, size=40),
-                        ft.Text(_t("no_active_tramites"))
+                        ft.Icon(ft.icons.EVENT_BUSY_OUTLINED, opacity=0.5, size=40),
+                        ft.Text("No tienes citas agendadas.")
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10)
                 ]
             else:
                 self.content_area.current.controls = [
-                    ft.Text(_t("my_tramites"), style=ft.TextThemeStyle.HEADLINE_MEDIUM),
-                    ft.ListView(controls=[self._create_tramite_card(t) for t in tramites], expand=True, spacing=10)
+                    ft.Text("Mis Citas Agendadas", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                    ft.ListView(controls=[self._create_appointment_card(a) for a in appointments], expand=True, spacing=10)
                 ]
         except Exception as e:
-            await handle_api_error(self.page, e, "load_tramites")
+            await handle_api_error(self.page, e, "load_appointments")
             self.content_area.current.controls = [ft.Text(_t("error.internal_error_load", error=str(e)))]
 
-    def _create_tramite_card(self, tramite: TramiteActivo) -> ft.Card:
-        """Creates a Card control for a single active procedure."""
+    def _create_appointment_card(self, appointment: Dict) -> ft.Card:
+        """Creates a Card control for a single scheduled appointment."""
+        # Note: The appointment time from the backend will be a string.
+        # We can parse it for better formatting if needed.
         return ft.Card(
             content=ft.Container(
                 padding=15,
                 content=ft.Column([
-                    ft.Text(tramite.nombre, weight=ft.FontWeight.BOLD),
-                    ft.Text(f"{_t('status')}: {tramite.estado}"),
-                    ft.Text(f"{_t('start_date', default='Start Date')}: {tramite.fecha_inicio.strftime('%Y-%m-%d')}", italic=True, color=ft.colors.OUTLINE),
+                    ft.Text(f"Cita ID: {appointment['id']}", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Trámite ID: {appointment['procedure_id']}"),
+                    ft.Text(f"Fecha y Hora: {appointment['appointment_time']}"),
+                    ft.Chip(label=ft.Text(appointment['status'])),
                 ])
             )
         )
@@ -284,6 +312,46 @@ class CitizenContentView(ft.UserControl):
 
     def _create_program_card(self, program: ProgramInfo) -> ft.Card:
         """Creates a Card control for a single program or procedure."""
+
+        async def open_booking_dialog(e):
+            # For simplicity, we use a text field for date. A real app would use a DatePicker.
+            datetime_field = ft.Ref[ft.TextField]()
+
+            async def book_click(e):
+                try:
+                    if not datetime_field.current.value:
+                        return # Add user feedback here
+
+                    # Basic parsing, assumes "YYYY-MM-DD HH:MM"
+                    dt_str = datetime_field.current.value
+
+                    appointment_data = {
+                        "procedure_id": program.id,
+                        "appointment_time": dt_str
+                    }
+                    await self.api_client.book_appointment(appointment_data)
+                    self.page.dialog.open = False
+                    await self.page.update_async()
+                    await show_snackbar_async(self.page, "Cita agendada exitosamente. Verifícala en 'Mis Trámites'.", ft.colors.GREEN)
+                    await self._show_tramites_view() # Refresh appointments list
+                except Exception as ex:
+                    await handle_api_error(self.page, ex, "book_appointment")
+
+            self.page.dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text(f"Agendar Cita para: {program.nombre}"),
+                content=ft.Column([
+                    ft.Text("Por favor, ingrese la fecha y hora deseada (YYYY-MM-DD HH:MM):"),
+                    ft.TextField(ref=datetime_field, hint_text="Ej: 2025-12-24 14:30"),
+                ]),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda e: setattr(self.page.dialog, 'open', False) or self.page.update()),
+                    ft.ElevatedButton("Confirmar Cita", on_click=book_click),
+                ]
+            )
+            self.page.dialog.open = True
+            await self.page.update_async()
+
         return ft.Card(
             content=ft.Container(
                 padding=15,
@@ -291,8 +359,11 @@ class CitizenContentView(ft.UserControl):
                     ft.Text(program.nombre, weight=ft.FontWeight.BOLD),
                     ft.Text(program.descripcion, italic=True, color=ft.colors.OUTLINE),
                     ft.Row([
-                        ft.TextButton(text=_t("details", default="Details"))
-                        # In a real app, this would open a details view
+                        ft.ElevatedButton(
+                            text="Agendar Cita",
+                            icon=ft.icons.CALENDAR_MONTH,
+                            on_click=open_booking_dialog
+                        )
                     ], alignment=ft.MainAxisAlignment.END)
                 ])
             )

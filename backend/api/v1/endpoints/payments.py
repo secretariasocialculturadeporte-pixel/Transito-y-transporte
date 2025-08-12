@@ -13,6 +13,9 @@ router = APIRouter()
 class CreateCheckoutSessionRequest(BaseModel):
     plan_id: str # e.g., "profesional_mensual" or "profesional_anual"
 
+class CreateFineCheckoutSessionRequest(BaseModel):
+    fine_id: int
+
 class CreateCheckoutSessionResponse(BaseModel):
     checkout_url: str
 
@@ -48,6 +51,33 @@ async def create_checkout_session(
 
     return CreateCheckoutSessionResponse(checkout_url=success_url)
 
+@router.post(
+    "/create-fine-checkout-session",
+    response_model=CreateCheckoutSessionResponse,
+    summary="Create a checkout session for a specific fine"
+)
+async def create_fine_checkout_session(
+    request_data: CreateFineCheckoutSessionRequest,
+    db: Session = Depends(get_db),
+    current_user: models_db.User = Depends(get_current_user)
+):
+    """
+    Simulates creating a checkout session for a citizen to pay a specific fine.
+    """
+    fine = crud.get_fine_by_id(db, fine_id=request_data.fine_id)
+
+    # Validation
+    if not fine:
+        raise HTTPException(status_code=404, detail="Fine not found.")
+    if fine.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only pay your own fines.")
+    if fine.status == "Pagado":
+        raise HTTPException(status_code=400, detail="This fine has already been paid.")
+
+    success_url = f"/payment_success.html?type=fine&fine_id={fine.id}"
+
+    return CreateCheckoutSessionResponse(checkout_url=success_url)
+
 
 @router.post("/webhook", summary="Handle payment provider webhooks")
 async def handle_payment_webhook(
@@ -65,12 +95,12 @@ async def handle_payment_webhook(
         payload = await request.json()
         event_type = payload.get("event_type")
 
-        if event_type == "payment_succeeded":
+        if event_type == "subscription_payment_succeeded":
             entidad_id = payload.get("entidad_id")
             plan_id = payload.get("plan_id")
 
             if not all([entidad_id, plan_id]):
-                raise HTTPException(status_code=400, detail="Missing entidad_id or plan_id in webhook payload")
+                raise HTTPException(status_code=400, detail="Missing entidad_id or plan_id in subscription webhook payload")
 
             # Determine subscription duration
             start_date = date.today()
@@ -89,6 +119,16 @@ async def handle_payment_webhook(
             )
             print(f"Subscription created for entity {entidad_id} for plan {plan_id}")
             return {"status": "success", "message": "Webhook processed and subscription created."}
+
+        elif event_type == "fine_payment_succeeded":
+            fine_id = payload.get("fine_id")
+            if not fine_id:
+                raise HTTPException(status_code=400, detail="Missing fine_id in fine payment webhook payload")
+
+            # Update the fine status in the database
+            crud.update_fine_status(db=db, fine_id=fine_id, new_status="Pagado")
+            print(f"Fine {fine_id} marked as paid.")
+            return {"status": "success", "message": "Webhook processed and fine status updated."}
 
         return {"status": "ignored", "message": f"Event type '{event_type}' not handled."}
 

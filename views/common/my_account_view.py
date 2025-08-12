@@ -25,10 +25,74 @@ class MyAccountView(ft.UserControl):
         self.pw_form_error_text_ref = ft.Ref[ft.Text]()
         self.change_pw_button_ref = ft.Ref[ft.ElevatedButton]()
         self.user_details_area_ref = ft.Ref[ft.Column]()
+        self.notification_prefs_area_ref = ft.Ref[ft.Column]()
 
     async def did_mount_async(self):
         """Load the user's full details when the view is mounted."""
         await self._load_user_details()
+        await self._load_notification_preferences()
+
+    async def _load_notification_preferences(self):
+        """Fetches and displays the user's notification preferences."""
+        if not self.notification_prefs_area_ref.current:
+            return
+
+        self.notification_prefs_area_ref.current.controls = [ft.ProgressRing(width=20, height=20)]
+        await self.notification_prefs_area_ref.current.update_async()
+
+        try:
+            prefs = await self.api_client.get_my_notification_preferences()
+            self.notification_prefs_area_ref.current.controls = self._build_preferences_display(prefs)
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_notification_prefs")
+            self.notification_prefs_area_ref.current.controls = [ft.Text("Error al cargar preferencias.")]
+
+        await self.notification_prefs_area_ref.current.update_async()
+
+    def _build_preferences_display(self, prefs: Dict) -> List[ft.Control]:
+        """Constructs the notification preferences display."""
+
+        async def on_pref_change(e):
+            switch = e.control
+            key = switch.data  # The preference key, e.g., 'on_new_fine'
+            value = switch.value
+
+            # Disable switch while saving
+            switch.disabled = True
+            await self.update_async()
+
+            try:
+                await self.api_client.update_my_notification_preferences({key: value})
+                await show_snackbar_async(self.page, "Preferencia actualizada.", ft.colors.GREEN)
+            except Exception as ex:
+                # Revert switch on error
+                switch.value = not value
+                await handle_api_error(self.page, ex, "update_preference")
+            finally:
+                switch.disabled = False
+                await self.update_async()
+
+        return [
+            ft.Text("Preferencias de Notificación", weight=ft.FontWeight.BOLD, size=18),
+            ft.Switch(
+                label="Recibir email por multas nuevas",
+                value=prefs.get("on_new_fine", True),
+                on_change=on_pref_change,
+                data="on_new_fine"
+            ),
+            ft.Switch(
+                label="Recibir email por vencimiento de documentos",
+                value=prefs.get("on_document_expiration", True),
+                on_change=on_pref_change,
+                data="on_document_expiration"
+            ),
+            ft.Switch(
+                label="Recibir recordatorios de citas",
+                value=prefs.get("on_appointment_reminder", True),
+                on_change=on_pref_change,
+                data="on_appointment_reminder"
+            ),
+        ]
 
     async def _load_user_details(self):
         """Fetches user details from the API and builds the display."""
@@ -160,6 +224,15 @@ class MyAccountView(ft.UserControl):
                     elevation=1,
                     margin=ft.margin.symmetric(vertical=5),
                     content=ft.Container(pw_change_form, padding=20)
+                ),
+                ft.Card(
+                    elevation=1,
+                    margin=ft.margin.symmetric(vertical=5),
+                    content=ft.Container(
+                        ref=self.notification_prefs_area_ref,
+                        padding=20,
+                        content=ft.ProgressRing() # Initial loading indicator
+                    )
                 ),
             ],
             spacing=15,
