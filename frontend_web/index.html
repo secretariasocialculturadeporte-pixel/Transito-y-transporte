@@ -16,7 +16,18 @@
                 <li><a href="#plans">Planes</a></li>
                 <li><a href="#downloads">Descargas</a></li>
                 <li><a href="#faq">Preguntas Frecuentes</a></li>
-                <li><a href="/app" class="cta-button">Acceso Clientes</a></li>
+                <li id="nav-auth-section">
+                    <!-- This container is for logged-out users -->
+                    <span id="login-link-container">
+                        <a href="/app" class="cta-button">Acceso Clientes</a>
+                    </span>
+                    <!-- This container is for logged-in users, hidden by default -->
+                    <span id="user-greeting-container" class="hidden">
+                        <span id="user-greeting"></span>
+                        <a href="/app" class="cta-button">Ir al Panel</a>
+                        <a href="#" id="logout-button" class="cta-button-secondary">Salir</a>
+                    </span>
+                </li>
             </ul>
         </nav>
         <section class="hero">
@@ -67,7 +78,7 @@
                         <li>Acceso para 2 administradores</li>
                         <li>Soporte por correo electrónico</li>
                     </ul>
-                    <button class="cta-button">Empezar Prueba</button>
+                    <button class="cta-button" id="buy-trial-plan">Empezar Prueba</button>
                 </div>
                 <div class="plan-card featured">
                     <h3>Plan Profesional</h3>
@@ -78,7 +89,7 @@
                         <li>Soporte prioritario</li>
                         <li>Módulo de Análisis de Datos</li>
                     </ul>
-                    <button class="cta-button">Adquirir Plan</button>
+                    <button class="cta-button" id="buy-monthly-plan">Adquirir Plan</button>
                 </div>
                 <div class="plan-card">
                     <h3>Plan Anual</h3>
@@ -88,7 +99,7 @@
                         <li>15% de Descuento</li>
                         <li>Soporte dedicado</li>
                     </ul>
-                    <button class="cta-button">Adquirir Plan Anual</button>
+                    <button class="cta-button" id="buy-yearly-plan">Adquirir Plan Anual</button>
                 </div>
             </div>
             <div class="payment-logos">

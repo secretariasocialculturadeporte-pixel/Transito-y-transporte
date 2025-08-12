@@ -19,6 +19,19 @@ class TransitAuthority(Base):
     longitude = Column(Float, nullable=True)
 
     users = relationship("User", back_populates="authority")
+    api_keys = relationship("ApiKey", back_populates="authority")
+    subscriptions = relationship("Subscription", back_populates="authority")
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entidad_id = Column(String, ForeignKey("transit_authorities.id"), unique=True) # Each entity has one set of keys
+    provider = Column(String) # e.g., "openai", "google"
+    encrypted_key = Column(String)
+
+    authority = relationship("TransitAuthority", back_populates="api_keys")
 
 
 class User(Base):
@@ -38,3 +51,21 @@ class User(Base):
 
 # We would continue to define tables for Vehicle, Fine, Course, etc.
 # For this phase, starting with User and TransitAuthority is sufficient to establish the pattern.
+
+from sqlalchemy import DateTime
+from sqlalchemy.sql import func
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entidad_id = Column(String, ForeignKey("transit_authorities.id"))
+    plan_name = Column(String, nullable=False) # e.g., "Profesional Mensual", "Profesional Anual"
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    status = Column(String, default="active") # active, expired, cancelled
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    authority = relationship("TransitAuthority", back_populates="subscriptions")

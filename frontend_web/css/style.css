@@ -57,6 +57,7 @@ nav ul {
     gap: 20px;
     margin: 0;
     padding: 0;
+    align-items: center;
 }
 
 .cta-button {
@@ -70,6 +71,37 @@ nav ul {
 .cta-button:hover {
     background-color: #21867a;
 }
+
+/* --- Dynamic Auth Styles --- */
+.hidden {
+    display: none !important;
+}
+
+#user-greeting-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: var(--text-color);
+}
+
+#user-greeting {
+    font-weight: bold;
+}
+
+.cta-button-secondary {
+    background-color: #555;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 0.9em;
+    transition: background-color 0.3s;
+}
+
+.cta-button-secondary:hover {
+    background-color: #777;
+}
+
 
 /* --- Hero Section & Slider --- */
 .hero {

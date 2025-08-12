@@ -251,7 +251,8 @@ class ChatMessageInput(BaseModel):
 
 class ChatMessageOutput(BaseModel):
     response_text: str
-    # Add other fields as needed, e.g., suggested_actions, new_context
+    new_context: Optional[ConversationContext] = None
+    # Add other fields as needed, e.g., suggested_actions
 
 class ChatResponse(ApiResponse):
     data: Optional[ChatMessageOutput] = None

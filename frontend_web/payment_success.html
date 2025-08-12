@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pago Exitoso - Portal de Movilidad</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 80px auto;
+            padding: 40px;
+            background-color: var(--white);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 id="main-message">Procesando su compra...</h1>
+        <p id="sub-message">Por favor, espere un momento mientras activamos su plan.</p>
+        <div id="result-message"></div>
+        <br>
+        <a href="/" class="cta-button">Volver a la página principal</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const mainMessage = document.getElementById('main-message');
+            const subMessage = document.getElementById('sub-message');
+            const resultMessage = document.getElementById('result-message');
+
+            const params = new URLSearchParams(window.location.search);
+            const planId = params.get('plan_id');
+            const entidadId = params.get('entidad_id');
+
+            if (!planId || !entidadId) {
+                mainMessage.textContent = "Error en la Compra";
+                subMessage.textContent = "No se encontró la información del plan. Por favor, intente de nuevo.";
+                return;
+            }
+
+            // This simulates the payment provider's webhook call.
+            // In a real scenario, the provider calls our backend directly.
+            // Here, the user's browser triggers the confirmation.
+            try {
+                const response = await fetch('/api/v1/payments/webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        event_type: 'payment_succeeded',
+                        plan_id: planId,
+                        entidad_id: entidadId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('La activación del plan falló.');
+                }
+
+                const result = await response.json();
+                console.log("Webhook simulation result:", result);
+
+                mainMessage.textContent = "¡Pago Exitoso!";
+                subMessage.textContent = "Gracias por su compra. Su plan ha sido activado.";
+                resultMessage.innerHTML = `<p>Plan: <strong>${planId}</strong></p><p>Entidad: <strong>${entidadId}</strong></p>`;
+
+            } catch (error) {
+                console.error("Error activating plan:", error);
+                mainMessage.textContent = "Error en la Activación";
+                subMessage.textContent = `Hubo un problema al activar su plan. Por favor, contacte a soporte. (${error.message})`;
+            }
+        });
+    </script>
+
+</body>
+</html>

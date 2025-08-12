@@ -10,3 +10,12 @@ passlib[bcrypt]
 scikit-learn
 pandas
 matplotlib
+langchain
+langchain-openai
+langgraph
+langsmith
+google-generativeai
+SpeechRecognition
+PyAudio
+python-multipart
+email-validator

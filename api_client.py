@@ -74,24 +74,29 @@ class ApiClient:
     # These will be implemented as the backend endpoints are created.
 
     async def get_my_fines(self) -> List[models.FineUIDetail]:
-        # return await self._request("GET", "/api/v1/fines/me")
-        print("API METHOD NOT IMPLEMENTED: get_my_fines")
-        return []
+        """Fetches fines for the currently logged-in user."""
+        response_data = await self._request("GET", "/api/v1/users/me/fines")
+        return [models.FineUIDetail(**fine) for fine in response_data]
 
     async def get_my_vehicles(self) -> List[models.VehicleBase]:
-        # return await self._request("GET", "/api/v1/vehicles/me")
-        print("API METHOD NOT IMPLEMENTED: get_my_vehicles")
-        return []
+        """Fetches vehicles for the currently logged-in user."""
+        response_data = await self._request("GET", "/api/v1/users/me/vehicles")
+        return [models.VehicleBase(**vehicle) for vehicle in response_data]
 
-    async def get_managed_users(self) -> List[models.UserInDB]:
-        # return await self._request("GET", "/api/v1/admin/users")
-        print("API METHOD NOT IMPLEMENTED: get_managed_users")
-        return []
+    async def get_managed_users(self, entidad_id: int) -> List[models.UserInDB]:
+        """Fetches all users managed by the admin for a specific transit entity."""
+        response_data = await self._request("GET", f"/api/v1/entities/{entidad_id}/users")
+        return [models.UserInDB(**user) for user in response_data]
 
-    async def get_vehicles_by_entity(self) -> List[models.VehicleBase]:
-        # return await self._request("GET", "/api/v1/admin/vehicles")
-        print("API METHOD NOT IMPLEMENTED: get_vehicles_by_entity")
-        return []
+    async def get_vehicles_by_entity(self, entidad_id: int) -> List[models.VehicleBase]:
+        """Fetches all vehicles registered to a specific transit entity."""
+        response_data = await self._request("GET", f"/api/v1/entities/{entidad_id}/vehicles")
+        return [models.VehicleBase(**vehicle) for vehicle in response_data]
+
+    async def get_fines_by_entity(self, entidad_id: int) -> List[models.FineUIDetail]:
+        """Fetches all fines issued by a specific transit entity."""
+        response_data = await self._request("GET", f"/api/v1/entities/{entidad_id}/fines")
+        return [models.FineUIDetail(**fine) for fine in response_data]
 
     # ... and so on for all other methods
     # Each would be a call to self._request(...)
@@ -99,3 +104,11 @@ class ApiClient:
     def logout(self):
         self._token = None
         print("User logged out, token cleared.")
+
+    async def send_chat_message(self, message: str, context: Optional[Dict] = None) -> Dict:
+        """
+        Sends a message to the chat API endpoint and gets a response.
+        """
+        payload = {"message": message, "context": context or {}}
+        response_data = await self._request("POST", "/api/v1/chat/", json=payload)
+        return response_data

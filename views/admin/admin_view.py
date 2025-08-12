@@ -9,6 +9,7 @@ from app_data import _t
 from models import VehicleBase, VehicleHojaDeVida, UserInDB
 from utils import handle_api_error, show_snackbar_async
 from analysis.data_analyzer import ANALYSIS_QUESTIONS_CATALOG, DataAnalyzer
+from views.chat.chat_view import ChatView
 from collections import defaultdict
 
 class AdminView(ft.UserControl):
@@ -45,6 +46,8 @@ class AdminView(ft.UserControl):
             await self._show_courses_management_view()
         elif selected_index == 4: # Analysis
             await self._show_analysis_view()
+        elif selected_index == 5: # Chat
+            self._show_chat_view()
 
         await self.update_async()
 
@@ -54,34 +57,43 @@ class AdminView(ft.UserControl):
         results_area = ft.Ref[ft.Column]()
 
         async def run_analysis(e, function_name: str):
-            # In a real app, you would fetch fresh data here
-            # This is a simplified example using the data loaded in the client
-            all_fines_data = [fine.dict() for fines in self.api_client._fines.values() for fine in fines]
-            all_vehicles_data = [vehicle.dict() for vehicle in self.api_client._vehicles.values()]
-
-            analyzer = DataAnalyzer(all_fines=all_fines_data, all_vehicles=all_vehicles_data)
-
             results_area.current.controls = [ft.ProgressRing()]
             await self.update_async()
 
             try:
-                result = analyzer.analyze(function_name)
+                # 1. Get entidad_id from user info
+                entidad_id = self.user_info.get("entidad_id")
+                if not entidad_id:
+                    results_area.current.controls = [ft.Text("Error: No se pudo determinar la entidad del usuario.", color=ft.colors.RED)]
+                    await self.update_async()
+                    return
 
-                # --- Display Logic ---
-                result_controls = [ft.Text(result.get("title", "Resultado"), style=ft.TextThemeStyle.TITLE_LARGE)]
-                if result['type'] == 'text':
-                    result_controls.append(ft.Text(result['data']))
-                elif result['type'] == 'table':
-                    columns = [ft.DataColumn(ft.Text(col)) for col in result['columns']]
-                    rows = [ft.DataRow(cells=[ft.DataCell(ft.Text(row[col])) for col in result['columns']]) for row in result['data']]
-                    result_controls.append(ft.DataTable(columns=columns, rows=rows))
-                elif result['type'] == 'image':
-                    result_controls.append(ft.Image(src=result['path']))
+                # 2. Fetch fresh data from the API
+                fines = await self.api_client.get_fines_by_entity(entidad_id)
+                vehicles = await self.api_client.get_vehicles_by_entity(entidad_id)
 
-                results_area.current.controls = result_controls
+                # 3. Convert data for the analyzer
+                all_fines_data = [f.dict() for f in fines]
+                all_vehicles_data = [v.dict() for v in vehicles]
+
+                # 4. Instantiate analyzer and run analysis
+                analyzer = DataAnalyzer(
+                    all_fines=all_fines_data,
+                    all_vehicles=all_vehicles_data,
+                    api_key="dummy-api-key" # Placeholder for API key management
+                )
+
+                result_control = analyzer.analyze(function_name)
+
+                # 5. Display the resulting Flet control
+                results_area.current.controls = [
+                    ft.Text("Resultado del Análisis", style=ft.TextThemeStyle.TITLE_LARGE),
+                    result_control
+                ]
 
             except Exception as ex:
                 await handle_api_error(self.page, ex, "run_analysis")
+                results_area.current.controls = [ft.Text(f"Ocurrió un error al generar el reporte: {ex}", color=ft.colors.RED)]
 
             await self.update_async()
 
@@ -116,6 +128,12 @@ class AdminView(ft.UserControl):
             ft.Column(ref=results_area)
         ]
         await self.update_async()
+
+    def _show_chat_view(self):
+        """Displays the conversational AI chat interface."""
+        # The ChatView is a self-contained component, pass user_info for personalization.
+        chat_view = ChatView(self.api_client, self.user_info)
+        self.content_area.current.controls = [chat_view]
 
 
     async def _show_courses_management_view(self):
@@ -401,6 +419,7 @@ class AdminView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.GAVEL, label="Infracciones"),
                         ft.NavigationRailDestination(icon=ft.icons.SCHOOL, label="Cursos"),
                         ft.NavigationRailDestination(icon=ft.icons.ANALYTICS, label="Análisis"),
+                        ft.NavigationRailDestination(icon=ft.icons.CHAT, label="Chat IA"),
                     ],
                     on_change=self._on_nav_change,
                 ),

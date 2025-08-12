@@ -28,3 +28,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# --- API Key "Encryption" (Simulated) ---
+# In a real production environment, use a robust encryption library like `cryptography`
+# with a securely managed key. For this simulation, we'll use base64 as a placeholder.
+import base64
+
+def encrypt_api_key(key: str) -> str:
+    return base64.b64encode(key.encode('utf-8')).decode('utf-8')
+
+def decrypt_api_key(encrypted_key: str) -> str:
+    return base64.b64decode(encrypted_key.encode('utf-8')).decode('utf-8')

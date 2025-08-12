@@ -13,9 +13,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-from .api.v1.endpoints import auth
+from .api.v1.endpoints import auth, keys, chat, payments
 
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(keys.router, prefix="/api/v1/keys", tags=["API Keys"])
+app.include_router(chat.router, prefix="/api/v1/chat", tags=["Conversational AI"])
+app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
 
 # We will include other routers here later
 
