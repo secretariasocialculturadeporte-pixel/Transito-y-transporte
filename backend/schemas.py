@@ -23,6 +23,37 @@ class User(UserBase):
         orm_mode = True
 
 
+# --- User Document Schemas ---
+
+class UserDocumentBase(BaseModel):
+    document_type: str
+    file_path: str
+    upload_date: datetime
+
+class UserDocument(UserDocumentBase):
+    id: int
+    user_id: int
+
+    class Config:
+        orm_mode = True
+
+
+# --- Audit Log Schemas ---
+from typing import Dict, Any
+
+class AuditLogBase(BaseModel):
+    action: str
+    username: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+class AuditLog(AuditLogBase):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True
+
+
 # --- Procedure and Appointment Schemas ---
 from datetime import datetime
 

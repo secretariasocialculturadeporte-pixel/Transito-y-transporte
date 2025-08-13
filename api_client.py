@@ -161,3 +161,20 @@ class ApiClient:
         payload = {"fine_id": fine_id}
         response = await self._request("POST", "/api/v1/payments/create-fine-checkout-session", json=payload)
         return response.get("checkout_url")
+
+    async def get_audit_logs(self) -> List[Dict]:
+        """Fetches audit log entries (admin only)."""
+        return await self._request("GET", "/api/v1/admin/audit-logs/")
+
+    async def get_my_documents(self) -> List[Dict]:
+        """Fetches the current user's uploaded documents."""
+        return await self._request("GET", "/api/v1/documents/me")
+
+    async def upload_document(self, file_path: str, document_type: str) -> Dict:
+        """Uploads a document file for the current user."""
+        with open(file_path, "rb") as f:
+            files = {"file": (os.path.basename(file_path), f)}
+            data = {"document_type": document_type}
+            # httpx needs the content-type to be multipart/form-data, but it sets it automatically
+            # when `files` are provided. We don't use json= here.
+            return await self._request("POST", "/api/v1/documents/upload", data=data, files=files)

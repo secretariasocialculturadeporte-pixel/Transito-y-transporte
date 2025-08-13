@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import flet as ft
 import io
 import base64
+import geopandas
+from shapely.geometry import Point
+import contextily as cx
 
 # This catalog defines the pre-canned questions the admin can ask.
 ANALYSIS_QUESTIONS_CATALOG = [
@@ -24,6 +27,12 @@ ANALYSIS_QUESTIONS_CATALOG = [
         "category": "Análisis de Flota Vehicular",
         "question": "¿Cuál es la distribución de tipos de vehículos en el parque automotor?",
         "analysis_function": "get_vehicle_type_distribution"
+    },
+    {
+        "id": "Q04",
+        "category": "Análisis Geoespacial",
+        "question": "Generar un mapa de calor de las infracciones en el municipio.",
+        "analysis_function": "generate_fines_heatmap"
     },
 ]
 
@@ -121,6 +130,44 @@ class DataAnalyzer:
         ax.pie(type_counts, labels=type_counts.index, autopct='%1.1f%%', startangle=90, colors=plt.cm.Paired.colors)
         ax.set_title('Distribución de Tipos de Vehículos')
         ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+        img_base64 = self._create_plot_base64(fig)
+        return ft.Image(src_base64=img_base64)
+
+    def generate_fines_heatmap(self) -> ft.Control:
+        """
+        Generates and returns a heatmap of fine locations.
+        Requires `geopandas` and `contextily`.
+        """
+        if self.fines_df.empty or 'latitude' not in self.fines_df.columns or 'longitude' not in self.fines_df.columns:
+            return ft.Text("No hay suficientes datos de geolocalización para generar un mapa de calor.")
+
+        # Filter out rows with no location data
+        geo_fines = self.fines_df.dropna(subset=['latitude', 'longitude'])
+        if geo_fines.empty:
+            return ft.Text("No se encontraron infracciones con datos de geolocalización.")
+
+        # Create a GeoDataFrame
+        gdf = geopandas.GeoDataFrame(
+            geo_fines,
+            geometry=geopandas.points_from_xy(geo_fines.longitude, geo_fines.latitude),
+            crs="EPSG:4326"  # WGS 84
+        )
+
+        # Create plot
+        fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+
+        # Reproject to a CRS suitable for web maps (like contextily's default)
+        gdf = gdf.to_crs(epsg=3857)
+
+        # Plot heatmap using kernel density estimation
+        geopandas.tools.plot_kde(gdf.geometry, ax=ax, cmap='viridis', alpha=0.5)
+
+        # Add a basemap from contextily
+        cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik)
+
+        ax.set_axis_off()
+        ax.set_title("Mapa de Calor de Infracciones")
 
         img_base64 = self._create_plot_base64(fig)
         return ft.Image(src_base64=img_base64)

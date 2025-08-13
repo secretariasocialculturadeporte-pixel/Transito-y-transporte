@@ -50,6 +50,8 @@ class CitizenContentView(ft.UserControl):
             await self._show_programs_view()
         elif selected_index == 5: # Offices Map
             await self._show_offices_map_view()
+        elif selected_index == 6: # My Documents
+            await self._show_documents_view()
 
         await self.update_async()
 
@@ -404,6 +406,114 @@ class CitizenContentView(ft.UserControl):
 
         await self.update_async()
 
+    async def _show_documents_view(self):
+        """Fetches and displays the user's documents, and provides an upload UI."""
+
+        async def on_file_picker_result(e: ft.FilePickerResultEvent):
+            if not e.files:
+                return # User cancelled
+
+            # For simplicity, we handle one file at a time
+            file = e.files[0]
+            document_type = doc_type_dropdown.current.value
+            if not document_type:
+                await show_snackbar_async(self.page, "Por favor, seleccione un tipo de documento.", ft.colors.RED)
+                return
+
+            upload_button.current.disabled = True
+            upload_button.current.text = "Subiendo..."
+            await self.update_async()
+
+            try:
+                await self.api_client.upload_document(file.path, document_type)
+                await show_snackbar_async(self.page, "Documento subido exitosamente.", ft.colors.GREEN)
+                await self._show_documents_view() # Refresh the view
+            except Exception as ex:
+                await handle_api_error(self.page, ex, "upload_document")
+            finally:
+                upload_button.current.disabled = False
+                upload_button.current.text = "Subir Documento Seleccionado"
+                await self.update_async()
+
+        file_picker = ft.FilePicker(on_result=on_file_picker_result)
+        self.page.overlay.append(file_picker)
+        await self.page.update_async()
+
+        doc_type_dropdown = ft.Ref[ft.Dropdown]()
+        upload_button = ft.Ref[ft.ElevatedButton]()
+
+        upload_ui = ft.Card(
+            content=ft.Container(
+                padding=15,
+                content=ft.Column([
+                    ft.Text("Subir Nuevo Documento", style=ft.TextThemeStyle.TITLE_MEDIUM),
+                    ft.Dropdown(
+                        ref=doc_type_dropdown,
+                        label="Tipo de Documento",
+                        options=[
+                            ft.dropdown.Option("SOAT"),
+                            ft.dropdown.Option("LICENSE", "Licencia de Conducir"),
+                            ft.dropdown.Option("ID", "Cédula de Ciudadanía"),
+                            ft.dropdown.Option("OTHER", "Otro"),
+                        ]
+                    ),
+                    ft.ElevatedButton(
+                        "Seleccionar Archivo...",
+                        icon=ft.icons.UPLOAD_FILE,
+                        on_click=lambda _: file_picker.pick_files(
+                            allow_multiple=False,
+                            allowed_extensions=["pdf", "png", "jpg"]
+                        )
+                    ),
+                    ft.ElevatedButton(
+                        ref=upload_button,
+                        text="Subir Documento Seleccionado",
+                        icon=ft.icons.UPLOAD,
+                        # This button is implicitly handled by the on_result callback
+                    )
+                ])
+            )
+        )
+
+        self.content_area.current.controls = [
+            ft.Text("Billetera de Documentos", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+            upload_ui,
+            ft.Divider(),
+            ft.Text("Mis Documentos Cargados", style=ft.TextThemeStyle.TITLE_MEDIUM),
+            ft.ProgressRing() # Placeholder for the list
+        ]
+        await self.update_async()
+
+        try:
+            documents = await self.api_client.get_my_documents()
+            if not documents:
+                doc_list_view = ft.Text("No tienes documentos guardados.")
+            else:
+                doc_list_view = ft.Column(
+                    controls=[
+                        ft.ListTile(
+                            leading=ft.Icon(ft.icons.DESCRIPTION),
+                            title=ft.Text(doc['document_type']),
+                            subtitle=ft.Text(f"Subido: {doc['upload_date']}"),
+                            trailing=ft.IconButton(
+                                icon=ft.icons.OPEN_IN_NEW,
+                                url=f"{self.api_client.base_url}{doc['file_path']}",
+                                url_target="_blank"
+                            )
+                        ) for doc in documents
+                    ]
+                )
+
+            # Replace the progress ring with the actual list
+            self.content_area.current.controls[-1] = doc_list_view
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_documents")
+            self.content_area.current.controls[-1] = ft.Text("Error al cargar documentos.")
+
+        await self.update_async()
+
+
     def build(self):
         """Builds the UI for the CitizenContentView."""
         return ft.Row(
@@ -423,6 +533,7 @@ class CitizenContentView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.DESCRIPTION_OUTLINED, selected_icon=ft.icons.DESCRIPTION, label=_t("my_tramites")),
                         ft.NavigationRailDestination(icon=ft.icons.EVENT_OUTLINED, selected_icon=ft.icons.EVENT, label=_t("programs")),
                         ft.NavigationRailDestination(icon=ft.icons.MAP_OUTLINED, selected_icon=ft.icons.MAP, label="Sedes"),
+                        ft.NavigationRailDestination(icon=ft.icons.FOLDER_SHARED_OUTLINED, selected_icon=ft.icons.FOLDER_SHARED, label="Documentos"),
                     ],
                     on_change=self._on_nav_change,
                 ),

@@ -53,7 +53,23 @@ def book_appointment(
     if not procedure or not procedure.is_active:
         raise HTTPException(status_code=404, detail="Procedure not found or is not active.")
 
-    return crud.create_appointment(db=db, user_id=current_user.id, appointment=appointment)
+    db_appointment = crud.create_appointment(db=db, user_id=current_user.id, appointment=appointment)
+
+    # --- Audit Log ---
+    crud.create_audit_log(
+        db=db,
+        action="APPOINTMENT_BOOKED",
+        user_id=current_user.id,
+        username=current_user.username,
+        details={
+            "appointment_id": db_appointment.id,
+            "procedure_id": db_appointment.procedure_id,
+            "appointment_time": db_appointment.appointment_time.isoformat()
+        }
+    )
+    # -----------------
+
+    return db_appointment
 
 @router.get("/appointments/me", response_model=List[schemas.Appointment], summary="Get my appointments")
 def get_my_appointments(

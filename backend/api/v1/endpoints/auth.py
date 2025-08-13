@@ -51,6 +51,14 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = security.create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
+    # --- Audit Log ---
+    crud.create_audit_log(
+        db=db,
+        action="USER_LOGIN",
+        user_id=user.id,
+        username=user.username
+    )
+    # -----------------
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/users/me", response_model=schemas.User)

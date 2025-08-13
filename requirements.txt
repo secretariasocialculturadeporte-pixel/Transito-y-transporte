@@ -19,3 +19,5 @@ SpeechRecognition
 PyAudio
 python-multipart
 email-validator
+geopandas
+shapely

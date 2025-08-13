@@ -116,10 +116,12 @@ def create_fine(db: Session, fine_data: dict, user_id: int, entidad_id: str):
     db_fine = models_db.Fine(
         user_id=user_id,
         entidad_id=entidad_id,
-        infraction_code=fine_data['infraction_code'],
-        placa=fine_data['placa'],
-        date=fine_data['date'],
-        tipo=fine_data['tipo']
+        infraction_code=fine_data.get('infraction_code'),
+        placa=fine_data.get('placa'),
+        date=fine_data.get('date'),
+        tipo=fine_data.get('tipo'),
+        latitude=fine_data.get('latitude'),
+        longitude=fine_data.get('longitude')
     )
     db.add(db_fine)
     db.commit()
@@ -167,3 +169,56 @@ def create_appointment(db: Session, user_id: int, appointment: schemas.Appointme
     db.commit()
     db.refresh(db_appointment)
     return db_appointment
+
+# --- Audit Log CRUD ---
+
+from typing import Optional, Dict, Any
+
+def create_audit_log(
+    db: Session,
+    action: str,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None
+):
+    """
+    Creates a new entry in the audit log.
+    """
+    db_log = models_db.AuditLog(
+        user_id=user_id,
+        username=username,
+        action=action,
+        details=details
+    )
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+def get_audit_logs(db: Session, skip: int = 0, limit: int = 100):
+    """
+    Retrieves a paginated list of audit logs, most recent first.
+    """
+    return db.query(models_db.AuditLog).order_by(models_db.AuditLog.timestamp.desc()).offset(skip).limit(limit).all()
+
+# --- User Document CRUD ---
+
+def create_user_document(db: Session, user_id: int, document_type: str, file_path: str):
+    """
+    Creates a new user document record in the database.
+    """
+    db_document = models_db.UserDocument(
+        user_id=user_id,
+        document_type=document_type,
+        file_path=file_path
+    )
+    db.add(db_document)
+    db.commit()
+    db.refresh(db_document)
+    return db_document
+
+def get_user_documents(db: Session, user_id: int):
+    """
+    Retrieves all documents for a specific user.
+    """
+    return db.query(models_db.UserDocument).filter(models_db.UserDocument.user_id == user_id).all()

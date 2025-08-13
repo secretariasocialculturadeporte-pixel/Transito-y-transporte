@@ -36,4 +36,15 @@ def update_my_notification_preferences(
     Updates one or more notification preferences for the currently authenticated user.
     """
     prefs = crud.update_notification_preferences(db, user_id=current_user.id, prefs_data=prefs_data)
+
+    # --- Audit Log ---
+    crud.create_audit_log(
+        db=db,
+        action="NOTIFICATION_PREFERENCES_UPDATED",
+        user_id=current_user.id,
+        username=current_user.username,
+        details=prefs_data.dict()
+    )
+    # -----------------
+
     return prefs

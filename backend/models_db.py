@@ -55,6 +55,7 @@ class User(Base):
     )
     fines = relationship("Fine", back_populates="user")
     appointments = relationship("Appointment", back_populates="user")
+    documents = relationship("UserDocument", back_populates="user")
 
 
 class Fine(Base):
@@ -69,6 +70,10 @@ class Fine(Base):
     date = Column(Date)
     status = Column(String, default="Pendiente")
     tipo = Column(String, default="Económico")
+
+    # Geolocation of the fine
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     user = relationship("User", back_populates="fines")
 
@@ -151,3 +156,16 @@ class Appointment(Base):
 
     user = relationship("User", back_populates="appointments")
     procedure = relationship("Procedure")
+
+
+from sqlalchemy.dialects.sqlite import JSON
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Nullable for system actions
+    username = Column(String, index=True) # Denormalized for easy lookup
+    action = Column(String, index=True) # e.g., "USER_LOGIN", "FINE_ISSUED"
+    details = Column(JSON, nullable=True) # e.g., {"fine_id": 123, "target_user": "citizen1"}

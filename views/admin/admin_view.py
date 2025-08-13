@@ -50,6 +50,8 @@ class AdminView(ft.UserControl):
             self._show_chat_view()
         elif selected_index == 6: # Procedure Management
             await self._show_procedures_management_view()
+        elif selected_index == 7: # Audit Log
+            await self._show_audit_log_view()
 
         await self.update_async()
 
@@ -219,6 +221,41 @@ class AdminView(ft.UserControl):
 
         except Exception as e:
             await handle_api_error(self.page, e, "load_procedures")
+
+        await self.update_async()
+
+    async def _show_audit_log_view(self):
+        """Fetches and displays the audit log."""
+        self.content_area.current.controls = [
+            ft.Row([
+                ft.Text("Pista de Auditoría", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                ft.IconButton(icon=ft.icons.REFRESH, on_click=self._show_audit_log_view)
+            ]),
+        ]
+
+        try:
+            logs = await self.api_client.get_audit_logs()
+
+            columns = [
+                ft.DataColumn(ft.Text("Timestamp")),
+                ft.DataColumn(ft.Text("Usuario")),
+                ft.DataColumn(ft.Text("Acción")),
+                ft.DataColumn(ft.Text("Detalles")),
+            ]
+
+            rows = []
+            for log in logs:
+                rows.append(ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(log['timestamp'])),
+                    ft.DataCell(ft.Text(log['username'])),
+                    ft.DataCell(ft.Text(log['action'])),
+                    ft.DataCell(ft.Text(str(log['details']))),
+                ]))
+
+            self.content_area.current.controls.append(ft.DataTable(columns=columns, rows=rows))
+
+        except Exception as e:
+            await handle_api_error(self.page, e, "load_audit_logs")
 
         await self.update_async()
 
@@ -508,6 +545,7 @@ class AdminView(ft.UserControl):
                         ft.NavigationRailDestination(icon=ft.icons.ANALYTICS, label="Análisis"),
                         ft.NavigationRailDestination(icon=ft.icons.CHAT, label="Chat IA"),
                         ft.NavigationRailDestination(icon=ft.icons.CALENDAR_MONTH, label="Trámites"),
+                        ft.NavigationRailDestination(icon=ft.icons.POLICY, label="Auditoría"),
                     ],
                     on_change=self._on_nav_change,
                 ),

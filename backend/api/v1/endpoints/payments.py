@@ -118,6 +118,9 @@ async def handle_payment_webhook(
                 end_date=end_date
             )
             print(f"Subscription created for entity {entidad_id} for plan {plan_id}")
+            # --- Audit Log ---
+            crud.create_audit_log(db=db, action="SUBSCRIPTION_PAYMENT_SUCCEEDED", details=payload)
+            # -----------------
             return {"status": "success", "message": "Webhook processed and subscription created."}
 
         elif event_type == "fine_payment_succeeded":
@@ -126,8 +129,16 @@ async def handle_payment_webhook(
                 raise HTTPException(status_code=400, detail="Missing fine_id in fine payment webhook payload")
 
             # Update the fine status in the database
-            crud.update_fine_status(db=db, fine_id=fine_id, new_status="Pagado")
+            db_fine = crud.update_fine_status(db=db, fine_id=fine_id, new_status="Pagado")
             print(f"Fine {fine_id} marked as paid.")
+            # --- Audit Log ---
+            crud.create_audit_log(
+                db=db,
+                action="FINE_PAYMENT_SUCCEEDED",
+                user_id=db_fine.user_id if db_fine else None,
+                details=payload
+            )
+            # -----------------
             return {"status": "success", "message": "Webhook processed and fine status updated."}
 
         return {"status": "ignored", "message": f"Event type '{event_type}' not handled."}

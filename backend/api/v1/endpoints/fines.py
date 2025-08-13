@@ -10,12 +10,16 @@ router = APIRouter()
 
 # --- Pydantic Schemas for Fines ---
 
+from typing import Optional
+
 class FineCreate(BaseModel):
     target_username: str
     infraction_code: str
     placa: str
     date: date
     tipo: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 # --- Fine Endpoints ---
 
@@ -61,5 +65,19 @@ def issue_fine(
             user_email=target_user.email,
             fine_details=fine_data.dict()
         )
+
+    # --- Audit Log ---
+    crud.create_audit_log(
+        db=db,
+        action="FINE_ISSUED",
+        user_id=current_user.id,
+        username=current_user.username,
+        details={
+            "fine_id": db_fine.id,
+            "target_user_id": target_user.id,
+            "placa": db_fine.placa
+        }
+    )
+    # -----------------
 
     return {"message": "Fine issued successfully", "fine_id": db_fine.id}

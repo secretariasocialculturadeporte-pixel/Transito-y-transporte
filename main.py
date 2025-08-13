@@ -5,6 +5,7 @@ from views.auth.login_view import LoginView
 from views.common.my_account_view import MyAccountView
 from views.citizen.citizen_content_view import CitizenContentView
 from views.admin.admin_view import AdminView
+from views.officer.officer_view import OfficerView
 from app_data import _t
 
 async def main(page: ft.Page):
@@ -25,10 +26,18 @@ async def main(page: ft.Page):
         """Callback executed after a successful login."""
         # Store session token and user info securely
         await page.client_storage.set_async("session.token", login_data.access_token)
-        await page.client_storage.set_async("session.user_info", login_data.user_info.dict())
-        page.window_width = 1000
-        page.window_height = 800
-        await page.go_async("/")
+        user_info_dict = login_data.user_info.dict()
+        await page.client_storage.set_async("session.user_info", user_info_dict)
+
+        # Role-based redirection
+        if user_info_dict.get("role") == "Técnico":
+            page.window_width = 450
+            page.window_height = 750
+            await page.go_async("/officer")
+        else:
+            page.window_width = 1200
+            page.window_height = 800
+            await page.go_async("/")
 
     async def logout(e):
         """Clears session and navigates to the login page."""
@@ -133,6 +142,14 @@ async def main(page: ft.Page):
                             controls=[ft.Text("Access Denied. You are not an admin.")]
                         )
                     )
+            elif page.route == "/officer":
+                # The OfficerView has its own simple AppBar, so we don't use the universal one.
+                page.views.append(
+                    ft.View(
+                        route="/officer",
+                        controls=[OfficerView(api_client=api, user_info=user_info_dict)]
+                    )
+                )
         else:
             # If no session and not on /login, redirect to login
             print("No session found, redirecting to /login")
